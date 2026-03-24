@@ -1,0 +1,17 @@
+/vendor
+/node_modules
+/.git
+/storage/*.key
+/storage/framework/cache/data
+/storage/framework/sessions
+/storage/framework/testing
+/storage/framework/views
+/public/hot
+/public/storage
+/.env
+/docker-compose.yml
+/Dockerfile
+/.idea
+/.vscode
+/phpunit.xml
+/tests
