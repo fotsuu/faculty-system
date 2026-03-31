@@ -14,13 +14,14 @@ class DeanController extends Controller
     public function dashboard()
     {
         // Get all faculty members (users with role 'faculty')
-        $totalFaculty = User::where('role', 'faculty')->count();
+        $facultyIds = User::where('role', 'faculty')->pluck('id');
+        $totalFaculty = $facultyIds->count();
         
-        // Get total students across all subjects
-        $totalStudents = Student::count();
+        // Get total students across all faculty subjects
+        $totalStudents = Student::whereIn('id', Record::whereIn('user_id', $facultyIds)->distinct('student_id')->pluck('student_id'))->count();
         
-        // Get total records
-        $totalRecords = Record::count();
+        // Get total records from faculty users
+        $totalRecords = Record::whereIn('user_id', $facultyIds)->count();
 
         // Calculate growth (mock growth for now or calculate from dates)
         $now = now();
@@ -30,8 +31,8 @@ class DeanController extends Controller
             ->count();
         $recordsGrowthPercent = $lastMonth > 0 ? round((($currentMonth - $lastMonth) / $lastMonth) * 100) : ($currentMonth > 0 ? 100 : 0);
         
-        // Use AnalyticsService for accurate analytics
-        $analyticsService = new \App\Services\AnalyticsService();
+        // Use AnalyticsService for accurate analytics scoped to faculty
+        $analyticsService = new \App\Services\AnalyticsService($facultyIds->toArray());
         $analytics = $analyticsService->generateAnalytics();
         
         $passFailRates = $analytics['passFailRates'];

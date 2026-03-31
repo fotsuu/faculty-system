@@ -105,14 +105,38 @@ class ExcelGradeImporter
             $yearLevel = trim($yearLevel);
         }
 
+        // Determine program/course from file data or fallback from currently logged in faculty department
+        $programFromData = $this->findValue($data, ['program', 'course', 'dept', 'department']);
+        if (is_string($programFromData)) {
+            $programFromData = trim($programFromData);
+        }
+
+        // Parse section or string like BSIT-1A to course/year if program is missing or generic
+        if (empty($programFromData) || strcasecmp(trim($programFromData), 'General Studies') === 0) {
+            $sectionSource = $meta['section'] ?? '';
+            if (is_string($sectionSource) && preg_match('/^([A-Za-z]+)[\- ]?(\d+)/', trim($sectionSource), $m)) {
+                if (empty($programFromData) || strcasecmp(trim($programFromData), 'General Studies') === 0) {
+                    $programFromData = strtoupper($m[1]);
+                }
+                if (empty($yearLevel)) {
+                    $yearLevel = $m[2];
+                }
+            }
+        }
+
+        // Ensure yearLevel fallback from row data if still missing
+        if (empty($yearLevel)) {
+            $yearLevel = $this->findValue($data, ['year', 'level', 'year level', 'yr']);
+        }
+
         // Find or create student
         $student = Student::updateOrCreate(
             ['student_id' => trim($studentId)],
             [
                 'name' => $studentName ?? 'Unknown',
                 'email' => strtolower(str_replace(' ', '.', $studentName ?? 'unknown')) . '@student.edu',
-                'program' => $this->findValue($data, ['program', 'course', 'dept']) ?? 'General Studies',
-                'year_level' => $yearLevel ?? $this->findValue($data, ['year', 'level', 'year level', 'yr']),
+                'program' => $programFromData ?: ($this->user->department ?? 'N/A'),
+                'year_level' => $yearLevel ?: '1',
                 'user_id' => $this->user->id,
             ]
         );

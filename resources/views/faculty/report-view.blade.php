@@ -167,10 +167,36 @@
 
             @if($isGradeReport)
                 @php
-                    $subjectCode = 'N/A'; $subjectName = 'N/A'; $semester = '1'; $schoolYear = '2025-2026'; $section = 'DC1A'; $instructorName = Auth::user()->name;
+                    $subjectCode = 'N/A';
+                    $subjectName = 'N/A';
+                    $semester = '1';
+                    $schoolYear = '2025-2026';
+                    $section = 'N/A';
+                    $instructorName = $report->user->name ?? Auth::user()->name;
+                    $courseYearSection = 'N/A';
+
+                    $normalizeCourseYearValue = function ($value) {
+                        if (is_array($value)) {
+                            return implode(', ', array_filter(array_map(fn($v) => trim((string)$v), $value)));
+                        }
+                        if (!is_string($value)) {
+                            return '';
+                        }
+                        $trim = trim($value);
+                        if ($trim === '') {
+                            return '';
+                        }
+                        $json = json_decode($trim, true);
+                        if (is_array($json)) {
+                            return implode(', ', array_filter(array_map(fn($v) => trim((string)$v), $json)));
+                        }
+                        return $trim;
+                    };
+
                     $subjectCodeIndex = array_search('Subject Code', $headers);
                     $subjectNameIndex = array_search('Subject Name', $headers);
                     $studentNameIndex = array_search('Student Name', $headers);
+                    $studentIdIndex = array_search('Student ID', $headers);
                     $programIndex = array_search('Program', $headers);
                     $yearLevelIndex = array_search('Year Level', $headers);
                     $gradeIndex = array_search('Grade Point', $headers);
@@ -178,13 +204,77 @@
                     $semesterIndex = array_search('Semester', $headers);
                     $schoolYearIndex = array_search('School Year', $headers);
                     $sectionIndex = array_search('Section', $headers);
-                    
+
                     if (!empty($data[0])) {
-                        if ($subjectCodeIndex !== false) $subjectCode = $data[0][$subjectCodeIndex];
-                        if ($subjectNameIndex !== false) $subjectName = $data[0][$subjectNameIndex];
-                        if ($semesterIndex !== false && !empty($data[0][$semesterIndex])) $semester = $data[0][$semesterIndex];
-                        if ($schoolYearIndex !== false && !empty($data[0][$schoolYearIndex])) $schoolYear = $data[0][$schoolYearIndex];
-                        if ($sectionIndex !== false && !empty($data[0][$sectionIndex])) $section = $data[0][$sectionIndex];
+                        if ($subjectCodeIndex !== false && !empty($data[0][$subjectCodeIndex])) {
+                            $subjectCode = $data[0][$subjectCodeIndex];
+                        }
+                        if ($subjectNameIndex !== false && !empty($data[0][$subjectNameIndex])) {
+                            $subjectName = $data[0][$subjectNameIndex];
+                        }
+                        if ($semesterIndex !== false && !empty($data[0][$semesterIndex])) {
+                            $semester = $data[0][$semesterIndex];
+                        }
+                        if ($schoolYearIndex !== false && !empty($data[0][$schoolYearIndex])) {
+                            $schoolYear = $data[0][$schoolYearIndex];
+                        }
+                        if ($sectionIndex !== false && !empty($data[0][$sectionIndex])) {
+                            $section = $normalizeCourseYearValue($data[0][$sectionIndex]);
+                        }
+
+                        $course = ($programIndex !== false && !empty($data[0][$programIndex])) ? $data[0][$programIndex] : null;
+                        $yearLevel = ($yearLevelIndex !== false && !empty($data[0][$yearLevelIndex])) ? $data[0][$yearLevelIndex] : null;
+                        $isGenericCourse = empty($course) || strcasecmp(trim($course), 'General Studies') === 0;
+
+                        if (!$isGenericCourse && $course && $yearLevel) {
+                            $courseYearSection = $course . '-' . $yearLevel;
+                        } elseif (!$isGenericCourse && $course) {
+                            $courseYearSection = $course;
+                        } elseif (!empty($section)) {
+                            $courseYearSection = $section;
+                        } else {
+                            $courseYearSection = 'N/A';
+                        }
+
+                        // If the report header still shows a generic course, try to derive from row data or student record
+                        if ($isGenericCourse || empty($yearLevel) || trim($yearLevel) === '1' || strcasecmp(trim($courseYearSection), 'General Studies-1') === 0) {
+                            foreach ($data as $candidateRow) {
+                                if (!is_array($candidateRow) || count($candidateRow) < 3) {
+                                    continue;
+                                }
+                                $rowProgram = ($programIndex !== false ? trim((string)($candidateRow[$programIndex] ?? '')) : '');
+                                $rowYear = ($yearLevelIndex !== false ? trim((string)($candidateRow[$yearLevelIndex] ?? '')) : '');
+                                $rowSection = ($sectionIndex !== false ? $normalizeCourseYearValue($candidateRow[$sectionIndex] ?? '') : '');
+                                $rowStudentId = ($studentIdIndex !== false ? trim((string)($candidateRow[$studentIdIndex] ?? '')) : '');
+
+                                if ($rowSection && strcasecmp($rowSection, 'General Studies') !== 0) {
+                                    $courseYearSection = $rowSection;
+                                    break;
+                                }
+                                if ($rowProgram && strcasecmp($rowProgram, 'General Studies') !== 0 && $rowYear && trim($rowYear) !== '1') {
+                                    $courseYearSection = $rowProgram . '-' . $rowYear;
+                                    break;
+                                }
+                                if ($rowProgram && strcasecmp($rowProgram, 'General Studies') !== 0) {
+                                    $courseYearSection = $rowProgram;
+                                }
+
+                                if ($rowStudentId) {
+                                    $studentRecord = \App\Models\Student::where('student_id', $rowStudentId)->first();
+                                    if ($studentRecord && $studentRecord->program && strcasecmp(trim($studentRecord->program), 'General Studies') !== 0) {
+                                        $courseYearSection = trim($studentRecord->program);
+                                        if ($studentRecord->year_level && trim($studentRecord->year_level) !== '1') {
+                                            $courseYearSection .= '-' . trim($studentRecord->year_level);
+                                        }
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+
+                        if ((strcasecmp(trim($courseYearSection), 'General Studies') === 0 || strcasecmp(trim($courseYearSection), 'General Studies-1') === 0) && !empty($section)) {
+                            $courseYearSection = $section;
+                        }
                     }
                 @endphp
 
@@ -197,7 +287,7 @@
                             <div class="rog-meta-item"><span>Semester:</span> {{ $semester }}</div>
                             <div class="rog-meta-item"><span>Subject Description:</span> {{ $subjectName }}</div>
                             <div class="rog-meta-item"><span>School Year:</span> {{ $schoolYear }}</div>
-                            <div class="rog-meta-item"><span>Course, Year & Section:</span> {{ $section }}</div>
+                            <div class="rog-meta-item"><span>Course, Year & Section:</span> {{ $courseYearSection }}</div>
                             <div class="rog-meta-item"><span>Room No:</span> -</div>
                             <div class="rog-meta-item"><span>Time/Day:</span> -</div>
                             <div class="rog-meta-item"><span>Instructor:</span> {{ $instructorName }}</div>
@@ -212,11 +302,39 @@
                                 @php
                                     if (count($row) < 3) continue;
                                     $studentName = $row[$studentNameIndex] ?? 'Unknown';
-                                    $program = $row[$programIndex] ?? 'N/A';
-                                    $yearLevel = $row[$yearLevelIndex] ?? '1';
+                                    $studentId = ($studentIdIndex = array_search('Student ID', $headers)) !== false ? ($row[$studentIdIndex] ?? null) : null;
+                                    $program = $row[$programIndex] ?? null;
+                                    $yearLevel = $row[$yearLevelIndex] ?? null;
+                                    $rowSection = ($sectionIndex !== false ? $normalizeCourseYearValue($row[$sectionIndex] ?? '') : '');
+
+                                    // Prefer actual stored student data if program is generic or missing.
+                                    if (empty($program) || strcasecmp(trim($program), 'General Studies') === 0) {
+                                        $studentRecord = null;
+                                        if ($studentId) {
+                                            $studentRecord = \App\Models\Student::where('student_id', trim((string)$studentId))->first();
+                                        }
+                                        if ($studentRecord) {
+                                            $program = $studentRecord->program ?: $program;
+                                        }
+                                    }
+
+                                    if (empty($yearLevel)) {
+                                        if (!isset($studentRecord)) {
+                                            if ($studentId) {
+                                                $studentRecord = \App\Models\Student::where('student_id', trim((string)$studentId))->first();
+                                            }
+                                        }
+                                        if (!empty($studentRecord->year_level)) {
+                                            $yearLevel = $studentRecord->year_level;
+                                        }
+                                    }
+
+                                    $program = $program ?: 'N/A';
+                                    $yearLevel = $yearLevel ?: '1';
+
                                     $grade = $row[$gradeIndex] ?? 'N/A';
                                     $letterGrade = $row[$letterGradeIndex] ?? 'N/A';
-                                    
+
                                     if ($letterGrade === 'INC') $displayGrade = 'INC / -';
                                     elseif ($letterGrade === 'DR') $displayGrade = 'DR';
                                     elseif ($letterGrade === 'W') $displayGrade = 'W';
@@ -228,8 +346,14 @@
                                     elseif ($letterGrade == 'INC') $remarks = 'Incomplete';
                                     elseif ($letterGrade == 'DR') $remarks = 'Dropped';
                                     elseif ($letterGrade == 'W') $remarks = 'Withdrawn';
+
+                                    if (!empty($rowSection) && strcasecmp($rowSection, 'General Studies') !== 0) {
+                                        $courseYearDisplay = $rowSection;
+                                    } else {
+                                        $courseYearDisplay = ($program !== 'N/A' && $yearLevel !== '1') ? $program . '-' . $yearLevel : $program;
+                                    }
                                 @endphp
-                                <tr><td>{{ $index + 1 }}</td><td>{{ $studentName }}</td><td>{{ $program }} - {{ $yearLevel }}</td><td>{{ $displayGrade }}</td><td>{{ $remarks }}</td></tr>
+                                <tr><td>{{ $index + 1 }}</td><td>{{ $studentName }}</td><td>{{ $courseYearDisplay }}</td><td>{{ $displayGrade }}</td><td>{{ $remarks }}</td></tr>
                             @empty
                                 <tr><td colspan="5" style="text-align: center; padding: 40px; color: #999;">No student records found.</td></tr>
                             @endforelse

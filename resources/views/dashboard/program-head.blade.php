@@ -163,63 +163,7 @@
             </div>
         </div>
 
-        <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 24px; margin-bottom: 25px;">
-            <!-- Performance Overview -->
-            <div class="section">
-                <div class="section-header">
-                    <div>
-                        <h3 class="section-title">Department Performance</h3>
-                        <div class="section-subtitle">Overall Pass/Fail ratio across the department</div>
-                    </div>
-                </div>
-                <div class="chart-container">
-                    <canvas id="passFailChart"></canvas>
-                </div>
-            </div>
-
-        </div>
-
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 25px;">
-            <!-- Attendance -->
-            <div class="section">
-                <div class="section-header">
-                    <div>
-                        <h3 class="section-title">Attendance Trends</h3>
-                        <div class="section-subtitle">Average student attendance for the current semester</div>
-                    </div>
-                </div>
-                <div class="chart-container">
-                    <canvas id="attendanceChart"></canvas>
-                </div>
-            </div>
-
-            <!-- Top Performers -->
-            <div class="section">
-                <div class="section-header">
-                    <div>
-                        <h3 class="section-title">Top Performers</h3>
-                        <div class="section-subtitle">Based on cumulative GPA this semester</div>
-                    </div>
-                </div>
-                <div style="margin-top: 10px;">
-                    @forelse($topStudents as $index => $performer)
-                        <div class="performer-item">
-                            <div class="performer-rank">#{{ $index + 1 }}</div>
-                            <div class="performer-info">
-                                <div class="performer-name">{{ $performer['name'] }}</div>
-                                <div class="performer-id">{{ $performer['student_id'] }} • {{ $performer['subjects'] }}</div>
-                            </div>
-                            <div style="text-align: right;">
-                                <div class="performer-gpa">{{ $performer['gpa'] }}</div>
-                                <div class="performer-subject">{{ $performer['recordCount'] }} records</div>
-                            </div>
-                        </div>
-                    @empty
-                        <div style="padding: 20px; text-align: center; color: #999;">No performance data available.</div>
-                    @endforelse
-                </div>
-            </div>
-        </div>
+        @include('dashboard.partials.institutional-analytics')
 
         <!-- Recent Submissions -->
         <div class="section">
@@ -331,7 +275,7 @@
                                 <td><span style="text-transform: capitalize; background: #f1f5f9; padding: 4px 10px; border-radius: 12px; font-size: 11px;">{{ str_replace('_', ' ', $report->report_type) }}</span></td>
                                 <td>{{ $report->created_at->format('M d, Y') }}</td>
                                 <td>
-                                    <a href="{{ route('faculty.reports.view', $report->id) }}" class="btn" style="background:#f1f5f9; color:#1e3c72; padding:6px 12px; font-size:12px; text-decoration: none; border-radius: 4px; font-weight: 600;">View</a>
+                                    <button type="button" onclick="openReportModal({{ $report->id }})" class="btn" style="background:#f1f5f9; color:#1e3c72; padding:6px 12px; font-size:12px; border:none; border-radius: 4px; font-weight: 600; cursor: pointer;">View</button>
                                 </td>
                             </tr>
                         @empty
@@ -342,6 +286,14 @@
                     </tbody>
                 </table>
             </div>
+        </div>
+    </div>
+
+    <!-- Report View Modal -->
+    <div id="viewReportModal" style="display: none; position: fixed; inset: 0; z-index: 4000; background: rgba(0,0,0,0.55); align-items: center; justify-content: center; padding: 20px;">
+        <div style="position: relative; width: 100%; height: calc(100% - 40px); max-width: 1200px; background: white; border-radius: 12px; box-shadow: 0 15px 40px rgba(0,0,0,0.35); overflow: hidden;">
+            <button onclick="closeReportModal()" style="position: absolute; top: 12px; right: 12px; z-index: 20; background: #1e3c72; color: white; border: none; border-radius: 6px; padding: 8px 12px; font-weight: 700; cursor: pointer;">✕ Close</button>
+            <iframe id="reportIframe" src="about:blank" style="width: 100%; height: 100%; border: none;" sandbox="allow-same-origin allow-scripts allow-popups allow-forms"></iframe>
         </div>
     </div>
 
@@ -508,7 +460,7 @@
                 csv += 'Subject Code,Average Attendance\n';
                 if (attendanceTrends && attendanceTrends.length > 0) {
                     attendanceTrends.forEach(function(t) { 
-                        csv += '"' + (t.code||'') + '","' + (t.average||0).toFixed(2) + '%"\n'; 
+                        csv += '"' + (t.code||'') + '";"' + (t.attendance_percent||0).toFixed(2) + '%"\n'; 
                     });
                 } else {
                     csv += 'No attendance data available\n';
@@ -607,27 +559,7 @@
             });
         }
 
-        // Performance (next code continues)
-
-                        y: { suggestedMin: 0, suggestedMax: 100, ticks: { callback: v => v + '%' }, grid: { color: 'rgba(200,210,220,0.1)' } }
-                    },
-                    plugins: {
-                        legend: { position: 'bottom', labels: { boxWidth: 12, padding: 8 } }
-                    }
-                },
-                plugins: [{
-                    id: 'softShadow',
-                    beforeDatasetsDraw(chart) {
-                        const ctx = chart.ctx;
-                        ctx.save();
-                        ctx.shadowColor = 'rgba(0,0,0,0.08)';
-                        ctx.shadowBlur = 18;
-                        ctx.shadowOffsetY = 8;
-                    },
-                    afterDatasetsDraw(chart) { chart.ctx.restore(); }
-                }]
-            });
-        }
+        // Performance chart section is intentionally simplified to avoid duplication.
 
         document.getElementById('reportModalDownloadPh').addEventListener('click', function() {
             if (pendingReportContentPh && pendingReportTypePh) {
@@ -641,5 +573,19 @@
             document.getElementById('reportSuccessModalPh').classList.remove('show');
         });
     });
+
+    function openReportModal(reportId) {
+        var modal = document.getElementById('viewReportModal');
+        var iframe = document.getElementById('reportIframe');
+        iframe.src = '/faculty/reports/' + reportId + '/view?embedded=1';
+        modal.style.display = 'flex';
+    }
+
+    function closeReportModal() {
+        var modal = document.getElementById('viewReportModal');
+        var iframe = document.getElementById('reportIframe');
+        iframe.src = 'about:blank';
+        modal.style.display = 'none';
+    }
 </script>
 @endsection

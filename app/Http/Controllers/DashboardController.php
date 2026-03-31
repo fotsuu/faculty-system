@@ -228,7 +228,7 @@ class DashboardController extends Controller
             $passRate = $subjectPassFail ? $subjectPassFail['pass_rate'] : 0;
             
             $subjectAttendance = collect($attendanceTrends)->firstWhere('code', $subject->code);
-            $attendance = $subjectAttendance ? $subjectAttendance['average'] : 0;
+            $attendance = $subjectAttendance ? $subjectAttendance['attendance_percent'] : 0;
 
             return [
                 'id' => $subject->id, 'code' => $subject->code, 'name' => $subject->name,
@@ -643,6 +643,11 @@ class DashboardController extends Controller
         }
 
         // If no in-session preview data exists, fallback to DB records and render them using the same preview-style layout
+        $excelTotalRows = 0;
+        if (!empty($excelBySection)) {
+            $excelTotalRows = collect($excelBySection)->map(fn($rows) => is_array($rows) ? count($rows) : 0)->sum();
+        }
+
         if (empty($excelBySection) && $records->isNotEmpty()) {
             $scoreKeys = collect();
             foreach ($records as $record) {
@@ -694,10 +699,12 @@ class DashboardController extends Controller
             }
         }
 
+        $displayTotalRecords = $excelTotalRows > 0 ? $excelTotalRows : $records->count();
+
         return view('faculty.records', [
             'records' => $records,
             'recordsBySection' => $recordsBySection,
-            'totalRecords' => $records->count(),
+            'totalRecords' => $displayTotalRecords,
             'excelPreviewData' => $excelPreviewData,
             'excelBySection' => $excelBySection,
         ]);

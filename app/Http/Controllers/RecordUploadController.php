@@ -921,12 +921,13 @@ class RecordUploadController extends Controller
 
         try {
             // Find or create student
+            $studentProgram = $user->department ? trim($user->department) : 'N/A';
             $student = Student::firstOrCreate(
                 ['student_id' => $studentId],
                 [
                     'name' => $studentName,
                     'email' => strtolower(str_replace(' ', '.', $studentName)) . '@student.edu',
-                    'program' => 'General Studies',
+                    'program' => $studentProgram,
                 ]
             );
 
@@ -1028,7 +1029,7 @@ class RecordUploadController extends Controller
                 'student_id' => 'STU00001',
                 'name' => 'Sample Student',
                 'email' => 'sample@student.edu',
-                'program' => 'General Studies',
+                'program' => $user->department ? trim($user->department) : 'N/A',
             ]);
         }
 
