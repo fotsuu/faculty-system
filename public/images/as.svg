@@ -1,0 +1,22 @@
+<svg width="80" height="80" viewBox="0 0 80 80" xmlns="http://www.w3.org/2000/svg">
+  <!-- Outer circle -->
+  <circle cx="40" cy="40" r="38" fill="url(#logoGradient)" stroke="white" stroke-width="2"/>
+  
+  <!-- Gradient definition -->
+  <defs>
+    <radialGradient id="logoGradient" cx="30%" cy="30%">
+      <stop offset="0%" style="stop-color:#FFD700;stop-opacity:1" />
+      <stop offset="50%" style="stop-color:#FFA500;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#1e3c72;stop-opacity:1" />
+    </radialGradient>
+  </defs>
+  
+  <!-- Inner circle border -->
+  <circle cx="40" cy="40" r="35" fill="none" stroke="rgba(255,255,255,0.3)" stroke-width="1"/>
+  
+  <!-- Central shield shape -->
+  <path d="M 40 20 L 55 30 L 55 48 Q 40 58 40 58 Q 25 48 25 30 Z" fill="white" opacity="0.9"/>
+  
+  <!-- Center dot -->
+  <circle cx="40" cy="40" r="3" fill="#1e3c72"/>
+</svg>
