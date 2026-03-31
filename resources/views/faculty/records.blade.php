@@ -15,14 +15,20 @@
             <div style="flex: 1;">
                 <label style="display: block; font-size: 13px; font-weight: 600; color: #334155; margin-bottom: 8px;">Select Class Record File</label>
                 <input type="file" name="file" id="fileInput" required style="width: 100%; padding: 8px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 14px; background: #f8fafc;">
+                <div id="uploadStatus" style="display: none; margin-top: 8px; font-size: 12px; color: #059669; display: flex; align-items: center; gap: 6px;">
+                    <svg xmlns="http://www.w3.org/2000/svg" style="width: 16px; height: 16px; animation: spin 1s linear infinite;" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    <span id="uploadMessage">Processing file...</span>
+                </div>
             </div>
-            <button type="submit" style="background: #1e3c72; color: white; border: none; padding: 10px 24px; border-radius: 8px; font-weight: 600; cursor: pointer; height: 42px; display: flex; align-items: center; gap: 8px;">
-                <svg xmlns="http://www.w3.org/2000/svg" style="width: 18px; height: 18px;" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-                </svg>
-                Upload File
-            </button>
         </form>
+
+        <style>
+            @keyframes spin {
+                to { transform: rotate(360deg); }
+            }
+        </style>
     </div>
 
     <!-- Records Table -->
@@ -40,35 +46,68 @@
             </div>
         </div>
 
-        @if($records->count() > 0)
-        <div style="overflow-x: auto;">
-            <table id="recordsTable" style="width: 100%; border-collapse: collapse; font-size: 14px;">
-                <thead>
-                    <tr style="background: #f8fafc; border-bottom: 2px solid #edf2f7;">
-                        <th style="padding: 16px; text-align: left; font-weight: 700; color: #1e3c72;">Student ID</th>
-                        <th style="padding: 16px; text-align: left; font-weight: 700; color: #1e3c72;">Student Name</th>
-                        <th style="padding: 16px; text-align: left; font-weight: 700; color: #1e3c72;">Subject Code</th>
-                        <th style="padding: 16px; text-align: left; font-weight: 700; color: #1e3c72;">Subject Name</th>
-                        <th style="padding: 16px; text-align: center; font-weight: 700; color: #1e3c72;">Grade</th>
-                        <th style="padding: 16px; text-align: center; font-weight: 700; color: #1e3c72;">Status</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @foreach($records as $record)
-                    <tr style="border-bottom: 1px solid #edf2f7; transition: all 0.2s ease;" onmouseover="this.style.backgroundColor='#f1f5f9'" onmouseout="this.style.backgroundColor='transparent'">
-                        <td style="padding: 14px 16px; font-weight: 600; color: #1e3c72;">{{ $record->student->student_id ?? 'N/A' }}</td>
-                        <td style="padding: 14px 16px; color: #334155; font-weight: 500;">{{ $record->student->name ?? 'Unknown' }}</td>
-                        <td style="padding: 14px 16px; color: #64748b;">{{ $record->subject->code ?? 'N/A' }}</td>
-                        <td style="padding: 14px 16px; color: #64748b;">{{ $record->subject->name ?? 'Unknown' }}</td>
-                        <td style="padding: 14px 16px; text-align: center; font-weight: 700; color: #1e3c72;">{{ $record->grade ?? '-' }}</td>
-                        <td style="padding: 14px 16px; text-align: center;">
-                            <span style="background: #ecfdf5; color: #059669; padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: 700;">Recorded</span>
-                        </td>
-                    </tr>
-                    @endforeach
-                </tbody>
-            </table>
-        </div>
+        @php
+            $useExcel = !empty($excelBySection) && !empty($excelPreviewData['headers']);
+        @endphp
+
+        @if($useExcel)
+            @foreach($excelBySection as $section => $sectionRows)
+                <div style="margin-bottom: 24px;">
+                    <h4 style="font-size: 16px; font-weight: 700; color: #1e3c72; margin-bottom: 12px;">Section: {{ $section }}</h4>
+                    <div style="overflow-x: auto;">
+                        <table class="excelRecordsTable" style="width: 100%; border-collapse: collapse; font-size: 14px;">
+                            <thead>
+                                <tr style="background: #f8fafc; border-bottom: 2px solid #edf2f7;">
+                                    @foreach($excelPreviewData['headers'] as $header)
+                                        <th style="padding: 16px; text-align: left; font-weight: 700; color: #1e3c72;">{{ $header }}</th>
+                                    @endforeach
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach($sectionRows as $row)
+                                    <tr style="border-bottom: 1px solid #edf2f7; transition: all 0.2s ease;" onmouseover="this.style.backgroundColor='#f1f5f9'" onmouseout="this.style.backgroundColor='transparent'">
+                                        @foreach($row as $idx => $cell)
+                                            <td style="padding: 14px 16px; color: #334155;">{{ $cell }}</td>
+                                        @endforeach
+                                    </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            @endforeach
+        @elseif($records->count() > 0)
+            @foreach($recordsBySection as $section => $sectionRecords)
+                <div style="margin-bottom: 24px;">
+                    <h4 style="font-size: 16px; font-weight: 700; color: #1e3c72; margin-bottom: 12px;">Section: {{ $section }}</h4>
+                    <div style="overflow-x: auto;">
+                        <table class="recordsTable" style="width: 100%; border-collapse: collapse; font-size: 14px;">
+                            <thead>
+                                <tr style="background: #f8fafc; border-bottom: 2px solid #edf2f7;">
+                                    <th style="padding: 16px; text-align: left; font-weight: 700; color: #1e3c72;">Student Name</th>
+                                    <th style="padding: 16px; text-align: left; font-weight: 700; color: #1e3c72;">Subject Code</th>
+                                    <th style="padding: 16px; text-align: left; font-weight: 700; color: #1e3c72;">Subject Name</th>
+                                    <th style="padding: 16px; text-align: center; font-weight: 700; color: #1e3c72;">Grade</th>
+                                    <th style="padding: 16px; text-align: center; font-weight: 700; color: #1e3c72;">Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach($sectionRecords as $record)
+                                <tr style="border-bottom: 1px solid #edf2f7; transition: all 0.2s ease;" onmouseover="this.style.backgroundColor='#f1f5f9'" onmouseout="this.style.backgroundColor='transparent'">
+                                    <td style="padding: 14px 16px; color: #334155; font-weight: 500;">{{ $record->student->name ?? 'Unknown' }}</td>
+                                    <td style="padding: 14px 16px; color: #64748b;">{{ $record->subject->code ?? 'N/A' }}</td>
+                                    <td style="padding: 14px 16px; color: #64748b;">{{ $record->subject->name ?? 'Unknown' }}</td>
+                                    <td style="padding: 14px 16px; text-align: center; font-weight: 700; color: #1e3c72;">{{ $record->grade ?? '-' }}</td>
+                                    <td style="padding: 14px 16px; text-align: center;">
+                                        <span style="background: #ecfdf5; color: #059669; padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: 700;">Recorded</span>
+                                    </td>
+                                </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            @endforeach
         @else
         <div style="text-align: center; padding: 60px; color: #64748b;">
             <div style="font-size: 48px; margin-bottom: 16px; opacity: 0.2;">📋</div>
@@ -92,18 +131,20 @@
     <script>
         document.getElementById('recordSearch')?.addEventListener('input', function() {
             const searchTerm = this.value.toLowerCase();
-            const rows = document.querySelectorAll('#recordsTable tbody tr');
-            
+            const rows = document.querySelectorAll('.recordsTable tbody tr, .excelRecordsTable tbody tr');
+
             rows.forEach(row => {
                 const text = row.textContent.toLowerCase();
                 row.style.display = text.includes(searchTerm) ? '' : 'none';
             });
         });
 
-        // File upload validation
+        // File upload validation and auto-submit
         const fileInput = document.getElementById('fileInput');
         const uploadForm = document.getElementById('uploadForm');
         const unsupportedFileModal = document.getElementById('unsupportedFileModal');
+        const uploadStatus = document.getElementById('uploadStatus');
+        const uploadMessage = document.getElementById('uploadMessage');
         
         const supportedExtensions = ['csv', 'xls', 'xlsx'];
         
@@ -115,6 +156,14 @@
                 if (!supportedExtensions.includes(fileExtension)) {
                     unsupportedFileModal.style.display = 'flex';
                     this.value = ''; // Clear the file input
+                    uploadStatus.style.display = 'none';
+                } else {
+                    // Valid file - show loading status and auto-submit
+                    uploadStatus.style.display = 'flex';
+                    uploadMessage.textContent = `Loading ${fileName}...`;
+                    setTimeout(() => {
+                        uploadForm.submit();
+                    }, 300); // Small delay for UX feedback
                 }
             }
         });
@@ -123,6 +172,7 @@
             if (fileInput.files.length === 0) {
                 e.preventDefault();
                 unsupportedFileModal.style.display = 'flex';
+                uploadStatus.style.display = 'none';
             }
         });
     </script>

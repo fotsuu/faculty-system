@@ -64,6 +64,22 @@
         .signature-title { font-size: 12px; color: #666; }
         .draft-watermark { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(-45deg); font-size: 150px; font-weight: 900; color: rgba(0,0,0,0.03); pointer-events: none; text-transform: uppercase; z-index: 0; }
 
+        /* Embedded mode: only report content + print/download */
+        .embedded-report .sidebar,
+        .embedded-report .top-header,
+        .embedded-report .sidebar-logout {
+            display: none !important;
+        }
+
+        .embedded-report .main-content {
+            margin-left: 0 !important;
+        }
+
+        .embedded-report .main-area {
+            padding: 18px !important;
+            margin-top: 0 !important;
+        }
+
         /* Generic Report Table Styles */
         .generic-report-card { background: white; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); padding: 30px; }
         .generic-table { width: 100%; border-collapse: collapse; margin-top: 20px; }
@@ -81,7 +97,7 @@
         }
     </style>
 </head>
-<body>
+<body class="{{ isset($embedded) && $embedded ? 'embedded-report' : '' }}">
 <div class="container">
     <aside class="sidebar">
         <div class="sidebar-brand">
@@ -110,7 +126,9 @@
 
         <div class="main-area">
             <div class="action-buttons" style="margin-bottom: 25px; display: flex; align-items: center; justify-content: space-between;">
-                <a href="{{ route('faculty.reports') }}" style="display: inline-block; padding: 10px 20px; background: #1e3c72; color: white; text-decoration: none; border-radius: 4px; font-weight: 600; font-size: 14px;">← Back to Reports List</a>
+                @if(empty($embedded) || !$embedded)
+                    <a href="{{ route('faculty.reports') }}" style="display: inline-block; padding: 10px 20px; background: #1e3c72; color: white; text-decoration: none; border-radius: 4px; font-weight: 600; font-size: 14px;">← Back to Reports List</a>
+                @endif
                 <div style="display: flex; gap: 10px;">
                     <button onclick="window.print()" style="padding: 10px 20px; background: #6c757d; color: white; border: none; border-radius: 4px; font-weight: 600; cursor: pointer; font-size: 14px;">🖨️ Print Report</button>
                     <a href="{{ route('faculty.reports.download', $report) }}" style="display: inline-block; padding: 10px 20px; background: #2a5298; color: white; text-decoration: none; border-radius: 4px; font-weight: 600; font-size: 14px;">⬇ Download CSV</a>

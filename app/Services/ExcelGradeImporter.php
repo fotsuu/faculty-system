@@ -83,8 +83,26 @@ class ExcelGradeImporter
         $studentId = $this->findValue($data, ['id no.', 'id no', 'student id', 'student_id', 'id', 'sid']);
         $studentName = $this->findValue($data, ['name', 'student name', 'student_name', 'NAME']);
 
-        if (!$studentId) {
-            return; // Skip rows without student ID
+        // If no student ID found, try to find or create based on name
+        if (!$studentId && $studentName) {
+            // Try to find existing student by name
+            $existingStudent = Student::where('name', trim($studentName))->first();
+            if ($existingStudent) {
+                $studentId = $existingStudent->student_id;
+            } else {
+                // Generate a temporary ID from name if needed
+                $studentId = 'TEMP_' . strtoupper(substr(preg_replace('/[^a-z0-9]/i', '', $studentName), 0, 6)) . '_' . rand(1000, 9999);
+            }
+        }
+
+        if (!$studentId || !$studentName) {
+            return; // Skip rows without both student ID and name
+        }
+
+        // Determine year level from row data if available
+        $yearLevel = $this->findValue($data, ['year', 'level', 'year level', 'yr', 'grade level']);
+        if (is_string($yearLevel)) {
+            $yearLevel = trim($yearLevel);
         }
 
         // Find or create student
@@ -94,31 +112,72 @@ class ExcelGradeImporter
                 'name' => $studentName ?? 'Unknown',
                 'email' => strtolower(str_replace(' ', '.', $studentName ?? 'unknown')) . '@student.edu',
                 'program' => $this->findValue($data, ['program', 'course', 'dept']) ?? 'General Studies',
-                'year_level' => $this->findValue($data, ['year', 'level', 'year level', 'yr']),
+                'year_level' => $yearLevel ?? $this->findValue($data, ['year', 'level', 'year level', 'yr']),
                 'user_id' => $this->user->id,
             ]
         );
 
-        // Extract subject info
-        $subjectCode = $meta['subject'] ?? $this->findValue($data, ['subject', 'subject code', 'code']);
+        // Ensure existing student record updates year level if changed
+        if ($yearLevel && $student->year_level !== $yearLevel) {
+            $student->update(['year_level' => $yearLevel]);
+        }
+
+        // Extract subject info (prefer explicit subject code and name from parsed metadata)
+        $subjectCode = $meta['subject_code'] ?? $meta['subject'] ?? $this->findValue($data, ['subject', 'subject code', 'code']);
         $subjectCode = $this->normalizeSubjectCode($subjectCode);
+
+        $subjectNameFromMeta = $meta['subject_name'] ?? null;
+        if (empty($subjectNameFromMeta) && isset($meta['subject']) && $meta['subject'] !== $subjectCode) {
+            // If subject meta is longer text and not a code pattern, treat it as name
+            $subjectNameFromMeta = trim($meta['subject']);
+        }
 
         // Find or create subject
         $subject = Subject::firstOrCreate(
             ['code' => $subjectCode, 'user_id' => $this->user->id],
             [
-                'name' => ucwords(str_replace('_', ' ', $subjectCode)),
+                'name' => $subjectNameFromMeta ?: ucwords(str_replace('_', ' ', $subjectCode)),
                 'user_id' => $this->user->id,
                 'status' => 'active',
             ]
         );
 
+        if ($subjectNameFromMeta && $subject->name !== $subjectNameFromMeta) {
+            $subject->update(['name' => $subjectNameFromMeta]);
+        }
+
         // Update subject metadata if available
         if (!empty($meta['section']) || !empty($meta['instructor'])) {
-            $subject->update([
-                'section' => $meta['section'] ?? $subject->section,
-                'instructor' => $meta['instructor'] ?? $subject->instructor,
-            ]);
+            $updateData = [];
+            
+            // Handle sections: append new section if not already in the list
+            if (!empty($meta['section'])) {
+                $newSection = $meta['section']; // Could be string or array from upload
+                $existingSections = $subject->section ?? [];
+                
+                // Ensure existingSections is an array
+                if (!is_array($existingSections)) {
+                    $existingSections = !empty($existingSections) ? [$existingSections] : [];
+                }
+                
+                // If newSection is a string and not in the list, add it
+                if (is_string($newSection) && !in_array($newSection, $existingSections)) {
+                    $existingSections[] = $newSection;
+                } elseif (is_array($newSection)) {
+                    // If newSection is an array, merge with existing
+                    $existingSections = array_unique(array_merge($existingSections, $newSection));
+                }
+                
+                $updateData['section'] = empty($existingSections) ? null : $existingSections;
+            }
+            
+            if (!empty($meta['instructor'])) {
+                $updateData['instructor'] = $meta['instructor'];
+            }
+            
+            if (!empty($updateData)) {
+                $subject->update($updateData);
+            }
         }
 
         // Extract summary values
@@ -126,10 +185,23 @@ class ExcelGradeImporter
         $totalAll = $this->sanitizeNumeric($this->findValue($data, ['total_all', 'total all', 'total-all', 'TOTAL_all']));
         $finalTerm = $this->sanitizeNumeric($this->findValue($data, ['final_term', 'final term', 'final-term', 'Final_Term']));
         
-        // Priority to "Final Grade" or "GPA" columns as the authoritative grade
+        // Priority to "Final Grade" or "GPA" columns as the authoritative numeric grade
         $finalGradeRaw = $this->findValue($data, ['final grade', 'final_grade', 'final-grade', 'Final Grade', 'GPA', 'GWA']);
-        $numericGrade = is_numeric($finalGradeRaw) ? (float)$finalGradeRaw : null;
+        $numericGrade = is_numeric($finalGradeRaw) ? round((float)$finalGradeRaw, 2) : null;
         $rawGradeValue = $finalGradeRaw ?? null;
+
+        // For many class-record formats, EQV is the true PH-grade-point equivalent (e.g., 1.25, 2.50).
+        // Use it as grade_point when present, while keeping numericGrade/rawGrade from grade columns.
+        $eqvGradeRaw = $this->findValue($data, ['eqv', 'equivalent', 'grade equivalent', 'eqv.']);
+        $eqvGradePoint = is_numeric($eqvGradeRaw) ? round((float)$eqvGradeRaw, 2) : null;
+
+        // Maintain exactly two decimals in raw grade for common final-grade format
+        if (is_numeric($rawGradeValue) && strpos((string)$rawGradeValue, '.') !== false) {
+            $parts = explode('.', (string)$rawGradeValue);
+            if (strlen($parts[1]) > 2) {
+                $rawGradeValue = number_format((float)$rawGradeValue, 2, '.', '');
+            }
+        }
 
         $labTotal = $this->sanitizeNumeric($this->findValue($data, ['lab equivalent', 'laboratory total', 'lab total']));
         $nonLabTotal = $this->sanitizeNumeric($this->findValue($data, ['nonlab equi', 'non-laboratory total', 'non-lab total']));
@@ -141,7 +213,7 @@ class ExcelGradeImporter
         }
 
         // Calculate grade point (PH scale 1.0 - 5.0 where 1.0 is best)
-        $gradePoint = $numericGrade;
+        $gradePoint = !is_null($eqvGradePoint) ? $eqvGradePoint : $numericGrade;
         
         // If the value is on a 0-100 scale, convert it to 1.0-5.0 scale
         if (!is_null($gradePoint) && $gradePoint > 5.0) {
@@ -156,6 +228,7 @@ class ExcelGradeImporter
                 'student_id' => $student->id,
             ],
             [
+                'section' => !empty($meta['section']) ? (string) $meta['section'] : null,
                 'file_name' => $meta['filename'] ?? null,
                 'notes' => 'Imported from Excel',
                 'scores' => $data,
@@ -243,31 +316,47 @@ class ExcelGradeImporter
      */
     private function importAttendance($student, $subject, $value, $assessment, &$stats)
     {
-        // Map text/numeric values to attendance status
-        $status = 'absent';
-        if (strtolower($value) === 'present' || $value == 1) {
-            $status = 'present';
-        } elseif (strtolower($value) === 'late' || $value == 0.5) {
-            $status = 'late';
-        } elseif (strtolower($value) === 'excused' || strtolower($value) === 'exc') {
-            $status = 'excused';
+        $normalized = trim(strtolower((string)$value));
+
+        if ($normalized === "") {
+            $status = "absent";
+        } elseif (is_numeric($value)) {
+            $numeric = (float)$value;
+            if ($numeric >= 1) {
+                $status = "present";
+            } elseif ($numeric == 0.5) {
+                $status = "late";
+            } else {
+                $status = "absent";
+            }
+        } elseif (in_array($normalized, ["present", "p", "yes", "y", "x", "/"], true)) {
+            $status = "present";
+        } elseif (in_array($normalized, ["late", "l", "t"], true)) {
+            $status = "late";
+        } elseif (in_array($normalized, ["excused", "exc", "e"], true)) {
+            $status = "excused";
+        } elseif (in_array($normalized, ["absent", "a", "no", "n"], true)) {
+            $status = "absent";
+        } else {
+            // Default for unknown but non-empty values
+            $status = "present";
         }
 
         StudentAttendance::updateOrCreate(
             [
-                'user_id' => $this->user->id,
-                'subject_id' => $subject->id,
-                'student_id' => $student->id,
-                'session_number' => $assessment['number'] ?? 1,
+                "user_id" => $this->user->id,
+                "subject_id" => $subject->id,
+                "student_id" => $student->id,
+                "session_number" => $assessment["number"] ?? 1,
             ],
             [
-                'status' => $status,
-                'session_date' => now(),
-                'notes' => 'Imported from Excel',
+                "status" => $status,
+                "session_date" => now(),
+                "notes" => "Imported from Excel",
             ]
         );
 
-        $stats['attendance_imported']++;
+        $stats["attendance_imported"]++;
     }
 
     /**
@@ -409,32 +498,34 @@ class ExcelGradeImporter
     {
         $lower = strtolower(trim($column));
 
-        // Skip non-assessment columns or totals
-        if (preg_match('/id no|name|course|year|total|grade|equivalent|equi/i', $lower)) {
+        // Skip purely metadata columns
+        if (preg_match('/\b(id no|student id|student|name|course|program|year|section|instructor|remark|remarks|status)\b/i', $lower)) {
             return null;
         }
 
         // Final Exam priority
-        if (stripos($lower, 'final exam') !== false || (stripos($lower, 'final') !== false && stripos($lower, 'exam') !== false)) {
+        if (stripos($lower, 'final exam') !== false || (stripos($lower, 'finals') !== false || (stripos($lower, 'final') !== false && stripos($lower, 'exam') !== false))) {
             return ['type' => 'final', 'portion' => 'final_exam'];
         }
 
         // Midterm Exam priority
-        if (stripos($lower, 'midterm exam') !== false || stripos($lower, 'mid-exam') !== false || (stripos($lower, 'mid') !== false && stripos($lower, 'exam') !== false)) {
+        if (stripos($lower, 'midterm exam') !== false || stripos($lower, 'mid-exam') !== false || stripos($lower, 'midterm') !== false || stripos($lower, 'prelim') !== false || (stripos($lower, 'mid') !== false && stripos($lower, 'exam') !== false)) {
             return ['type' => 'midterm', 'portion' => 'mid_exam'];
         }
 
-        // Attendance patterns (including dates like 09/11/2024 or L1, L2)
+        // Attendance patterns (including dates like 09/11/2024 or A1, A2, Day 1)
         if (stripos($lower, 'attendance') !== false || stripos($lower, 'present') !== false || 
-            preg_match('/\d{1,2}\/\d{1,2}\/\d{2,4}/', $lower) || // 09/11/2024
-            preg_match('/^l\d+$/', $lower)) { // L1, L2
+            preg_match('/\d{1,2}[\/-]\d{1,2}[\/-]\d{2,4}/', $lower) || // 09/11/2024
+            preg_match('/^(a|att|attendance|day|week|session|day)\s*\d+$/i', $lower)) { // A1, Day 1, Week 1, Session 1
             $number = $this->extractNumber($lower) ?? 1;
             return ['type' => 'attendance', 'number' => $number];
         }
 
-        // Quiz patterns
-        if (stripos($lower, 'quiz') !== false || stripos($lower, ' q') !== false || preg_match('/q\d+/i', $lower)) {
-            $subtype = (stripos($lower, 'non-lab') !== false || stripos($lower, 'non-laboratory') !== false) ? 'non_laboratory' : (stripos($lower, 'lab') !== false ? 'laboratory' : 'non_laboratory');
+        // Quiz patterns (includes L1, L2 for Laboratory Quizzes if not matched as attendance)
+        if (stripos($lower, 'quiz') !== false || stripos($lower, ' q') !== false || 
+            preg_match('/q\s*\d+/i', $lower) || 
+            preg_match('/^(l|lab|activity|quiz)\s*\d+$/i', $lower)) { // L1, Lab 1, Activity 1 treated as Lab Quiz
+            $subtype = (stripos($lower, 'non-lab') !== false || stripos($lower, 'non-laboratory') !== false) ? 'non_laboratory' : (stripos($lower, 'lab') !== false || preg_match('/^(l|lab)\s*\d+$/i', $lower) ? 'laboratory' : 'non_laboratory');
             $number = $this->extractNumber($lower) ?? 1;
             return ['type' => 'quiz', 'subtype' => $subtype, 'number' => $number];
         }

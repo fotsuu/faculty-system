@@ -105,71 +105,115 @@
     </div>
 
     <!-- Analytics Section -->
-    <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 24px; margin-bottom: 30px;">
-        <!-- Pass/Fail Rate Chart -->
-        <div class="section" style="background: white; border-radius: 8px; padding: 25px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);">
-            <div class="section-header">
-                <div>
-                    <h3 class="section-title" style="font-size: 18px; font-weight: 700; color: #1e3c72;">Performance Overview</h3>
-                    <div class="section-subtitle" style="font-size: 13px; color: #999; margin-top: 4px;">Pass vs Fail rate per subject</div>
+    <!-- Analytics Dashboard -->
+    <div style="margin-bottom: 30px;">
+        <!-- Row 1: Student Performance Data + Pass and Fail Rate -->
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 24px;">
+            <!-- Student Performance Data -->
+            <div class="section" style="background: white; border-radius: 8px; padding: 25px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);">
+                <div class="section-header">
+                    <div>
+                        <h3 class="section-title" style="font-size: 18px; font-weight: 700; color: #1e3c72;">📊 Student Performance Data</h3>
+                        <div class="section-subtitle" style="font-size: 13px; color: #999; margin-top: 4px;">Class-wide performance summary</div>
+                    </div>
+                </div>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 16px;">
+                    <!-- Total Students -->
+                    <div style="background: #f8fafc; border-radius: 8px; padding: 16px; border-left: 4px solid #1e3c72;">
+                        <div style="font-size: 11px; font-weight: 700; color: #999; text-transform: uppercase; margin-bottom: 6px;">Total Students</div>
+                        <div style="font-size: 24px; font-weight: 700; color: #1e3c72;">{{ $totalStudents ?? 0 }}</div>
+                    </div>
+                    <!-- Class Average GPA -->
+                    <div style="background: #f8fafc; border-radius: 8px; padding: 16px; border-left: 4px solid #2a5298;">
+                        <div style="font-size: 11px; font-weight: 700; color: #999; text-transform: uppercase; margin-bottom: 6px;">Avg GPA</div>
+                        <div style="font-size: 24px; font-weight: 700; color: #2a5298;">
+                            @php
+                                $avgGPA = 0;
+                                if ($topStudents && count($topStudents) > 0) {
+                                    $avgGPA = collect($topStudents)->avg('gpa');
+                                }
+                            @endphp
+                            {{ number_format($avgGPA, 2) }}
+                        </div>
+                    </div>
+                    <!-- Pass Rate -->
+                    <div style="background: #f8fafc; border-radius: 8px; padding: 16px; border-left: 4px solid #059669;">
+                        <div style="font-size: 11px; font-weight: 700; color: #999; text-transform: uppercase; margin-bottom: 6px;">Pass Rate</div>
+                        <div style="font-size: 24px; font-weight: 700; color: #059669;">{{ $totalPass ?? 0 }}%</div>
+                    </div>
+                    <!-- Fail Rate -->
+                    <div style="background: #f8fafc; border-radius: 8px; padding: 16px; border-left: 4px solid #dc2626;">
+                        <div style="font-size: 11px; font-weight: 700; color: #999; text-transform: uppercase; margin-bottom: 6px;">Fail Rate</div>
+                        <div style="font-size: 24px; font-weight: 700; color: #dc2626;">{{ $totalFail ?? 0 }}%</div>
+                    </div>
+                </div>
+                <div style="background: #f0f6ff; border-left: 4px solid #1e3c72; padding: 12px; border-radius: 4px; font-size: 12px; color: #334155; line-height: 1.5;">
+                    <strong>Interpretation:</strong> Monitor overall class metrics to identify trends. High average GPA shows strong performance. If pass rate drops below 75%, consider additional support or interventions for struggling students.
                 </div>
             </div>
-            <div style="height: 300px; position: relative;">
-                <canvas id="passFailChart"></canvas>
+
+            <!-- Pass and Fail Rate -->
+            <div class="section" style="background: white; border-radius: 8px; padding: 25px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);">
+                <div class="section-header">
+                    <div>
+                        <h3 class="section-title" style="font-size: 18px; font-weight: 700; color: #1e3c72;">📈 Pass and Fail Rate</h3>
+                        <div class="section-subtitle" style="font-size: 13px; color: #999; margin-top: 4px;">Overall pass vs fail per subject</div>
+                    </div>
+                </div>
+                <div style="height: 280px; position: relative; margin-bottom: 16px;">
+                    <canvas id="passFailChart"></canvas>
+                </div>
+                <div style="background: #f0f6ff; border-left: 4px solid #1e3c72; padding: 12px; border-radius: 4px; font-size: 12px; color: #334155; line-height: 1.5;">
+                    <strong>Interpretation:</strong> The pass rate shows class success. Rates below 75% may indicate need for intervention. Monitor which subjects have higher failure rates.
+                </div>
             </div>
         </div>
 
-        <!-- Grade Distribution Chart -->
-        <div class="section" style="background: white; border-radius: 8px; padding: 25px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);">
-            <div class="section-header">
-                <h3 class="section-title" style="font-size: 18px; font-weight: 700; color: #1e3c72;">Grade Distribution</h3>
-            </div>
-            <div style="height: 300px; position: relative;">
-                <canvas id="gradeDistributionChart"></canvas>
-            </div>
-        </div>
-    </div>
-
-    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 30px;">
-        <!-- Attendance Trends -->
-        <div class="section" style="background: white; border-radius: 8px; padding: 25px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);">
+        <!-- Row 2: Attendance Rate (Full Width) -->
+        <div class="section" style="background: white; border-radius: 8px; padding: 25px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1); margin-bottom: 24px;">
             <div class="section-header">
                 <div>
-                    <h3 class="section-title" style="font-size: 18px; font-weight: 700; color: #1e3c72;">Attendance Trends</h3>
-                    <div class="section-subtitle" style="font-size: 13px; color: #999; margin-top: 4px;">Average attendance per subject</div>
+                    <h3 class="section-title" style="font-size: 18px; font-weight: 700; color: #1e3c72;">👥 Attendance Rate</h3>
+                    <div class="section-subtitle" style="font-size: 13px; color: #999; margin-top: 4px;">Semester attendance percentage per subject (accurate from records)</div>
                 </div>
             </div>
-            <div style="height: 250px; position: relative;">
+            <div style="height: 280px; position: relative; margin-bottom: 16px;">
                 <canvas id="attendanceChart"></canvas>
             </div>
+            <div style="background: #f0f6ff; border-left: 4px solid #1e3c72; padding: 12px; border-radius: 4px; font-size: 12px; color: #334155; line-height: 1.5;">
+                <strong>Interpretation:</strong> Consistent attendance above 80% indicates good engagement. Declining trends (week to week) may signal need for follow-up with absent students. Late arrivals should also be addressed.
+            </div>
         </div>
 
-        <!-- Top Students -->
+        <!-- Row 3: Top Performing Students (Full Width) -->
         <div class="section" style="background: white; border-radius: 8px; padding: 25px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);">
             <div class="section-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
                 <div>
-                    <h3 class="section-title" style="font-size: 18px; font-weight: 700; color: #1e3c72;">Top Performers</h3>
+                    <h3 class="section-title" style="font-size: 18px; font-weight: 700; color: #1e3c72;">🏆 Ranking of Top Performing Students</h3>
                     <div class="section-subtitle" style="font-size: 13px; color: #999; margin-top: 4px;">Based on cumulative GPA this semester</div>
                 </div>
-                <a href="{{ route('faculty.students') }}" style="font-size: 12px; color: #1e3c72; text-decoration: none; font-weight: 600;">View All</a>
+                <a href="{{ route('faculty.students') }}" style="font-size: 12px; color: #1e3c72; text-decoration: none; font-weight: 600;">View All →</a>
             </div>
-            <ul style="list-style: none; padding: 0;">
+            <ul style="list-style: none; padding: 0; margin-bottom: 16px;">
                 @forelse($topStudents as $index => $performer)
-                    <li style="display: flex; align-items: center; padding: 12px 0; border-bottom: 1px solid #f0f0f0;">
-                        <div style="width: 30px; font-size: 14px; font-weight: 700; color: #999;">#{{ $index + 1 }}</div>
+                    <li style="display: flex; align-items: center; padding: 14px 0; border-bottom: 1px solid #f0f0f0; gap: 14px;">
+                        <div style="min-width: 40px; height: 40px; background: linear-gradient(135deg, #1e3c72, #2a5298); border-radius: 50%; display: flex; align-items: center; justify-content: center; color: white; font-weight: 700; font-size: 16px;">{{ $index + 1 }}</div>
                         <div style="flex: 1;">
                             <div style="font-size: 14px; font-weight: 600; color: #1e3c72;">{{ $performer['name'] }}</div>
-                            <div style="font-size: 11px; color: #999;">{{ $performer['student_id'] }} • {{ $performer['program'] }}</div>
+                            <div style="font-size: 11px; color: #999;">{{ $performer['subjects'] }}</div>
                         </div>
-                        <div style="text-align: right;">
-                            <div style="font-size: 16px; font-weight: 700; color: #1e3c72;">{{ $performer['gpa'] }}</div>
-                            <div style="font-size: 11px; color: #999;">{{ $performer['recordCount'] }} records</div>
+                        <div style="text-align: right; min-width: 90px;">
+                            <div style="font-size: 18px; font-weight: 700; color: #1e3c72;">{{ $performer['gpa'] }}</div>
+                            <div style="font-size: 11px; color: #999;">GPA Score</div>
                         </div>
                     </li>
                 @empty
-                    <li style="padding: 20px; text-align: center; color: #999;">No performance data available.</li>
+                    <li style="padding: 30px; text-align: center; color: #999;">No performance data available. Upload student records to view rankings.</li>
                 @endforelse
             </ul>
+            <div style="background: #f0f6ff; border-left: 4px solid #1e3c72; padding: 12px; border-radius: 4px; font-size: 12px; color: #334155; line-height: 1.5;">
+                <strong>Interpretation:</strong> These top performers demonstrate excellence and merit recognition. Consider them for academic awards, peer tutoring roles, or inclusion in honor lists.
+            </div>
         </div>
     </div>
 
@@ -240,69 +284,7 @@
         </form>
     </div>
     
-    <!-- Generated Reports Summary -->
-    <div class="section-header">
-        <h2 class="section-title">Your Generated Reports</h2>
-    </div>
-    
-    @if(isset($facultyReports) && $facultyReports->isNotEmpty())
-        <div style="background: white; border-radius: 12px; padding: 24px; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05); margin-bottom: 30px;">
-            <div style="overflow-x: auto;">
-                <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
-                    <thead style="background: #f8fafc; border-bottom: 2px solid #edf2f7;">
-                        <tr>
-                            <th style="padding: 12px 16px; text-align: left; font-weight: 700; color: #1e3c72;">Report Title</th>
-                            <th style="padding: 12px 16px; text-align: left; font-weight: 700; color: #1e3c72;">Type</th>
-                            <th style="padding: 12px 16px; text-align: left; font-weight: 700; color: #1e3c72;">Generated</th>
-                            <th style="padding: 12px 16px; text-align: center; font-weight: 700; color: #1e3c72;">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach($facultyReports->take(5) as $report)
-                            <tr style="border-bottom: 1px solid #edf2f7;">
-                                <td style="padding: 16px; font-weight: 600; color: #1e3c72;">{{ $report->title }}</td>
-                                <td style="padding: 16px;">
-                                    @switch($report->report_type)
-                                        @case('grade')
-                                            <span style="background: #dbeafe; color: #0c4a6e; padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: 700;">Student Grades</span>
-                                            @break
-                                        @case('passFailAnalysis')
-                                            <span style="background: #dcfce7; color: #065f46; padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: 700;">Pass/Fail</span>
-                                            @break
-                                        @case('attendance')
-                                            <span style="background: #fef3c7; color: #78350f; padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: 700;">Attendance</span>
-                                            @break
-                                        @case('lectureLabSummary')
-                                            <span style="background: #ede9fe; color: #4c1d95; padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: 700;">Lecture & Lab</span>
-                                            @break
-                                        @default
-                                            <span style="background: #f3f4f6; color: #374151; padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: 700;">Comprehensive</span>
-                                    @endswitch
-                                </td>
-                                <td style="padding: 16px; color: #64748b; font-size: 13px;">{{ $report->created_at->format('M d, Y H:i') }}</td>
-                                <td style="padding: 16px; text-align: center;">
-                                    <div style="display: flex; gap: 8px; justify-content: center;">
-                                        <a href="{{ route('faculty.reports.view', $report) }}" style="background: #f1f5f9; color: #1e3c72; text-decoration: none; padding: 6px 12px; border-radius: 6px; font-size: 11px; font-weight: 600; cursor: pointer;">View</a>
-                                        <a href="{{ route('faculty.reports.download', $report) }}" style="background: #1e3c72; color: white; text-decoration: none; padding: 6px 12px; border-radius: 6px; font-size: 11px; font-weight: 600; cursor: pointer;">Download</a>
-                                    </div>
-                                </td>
-                            </tr>
-                        @endforeach
-                    </tbody>
-                </table>
-            </div>
-            @if($facultyReports->count() > 5)
-                <div style="text-align: center; padding: 16px; color: #64748b; font-size: 12px;">
-                    <a href="{{ route('faculty.reports') }}" style="color: #1e3c72; font-weight: 600; text-decoration: none;">View all {{ $facultyReports->count() }} reports →</a>
-                </div>
-            @endif
-        </div>
-    @else
-        <div style="background: white; border-radius: 12px; padding: 40px; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05); text-align: center; margin-bottom: 30px;">
-            <div style="font-size: 48px; margin-bottom: 16px; opacity: 0.2;">📊</div>
-            <div style="color: #64748b; font-size: 14px;">No reports generated yet. Use the Report Generator above to create your first report.</div>
-        </div>
-    @endif
+
 
     <!-- Modals -->
     @if($showExcelModal)
@@ -326,7 +308,24 @@
                         @foreach($excelPreviewData['rows'] as $row)
                             <tr style="border-bottom: 1px solid #edf2f7;">
                                 @foreach($row as $cell)
-                                    <td style="padding: 10px 12px; color: #334155;">{{ $cell }}</td>
+                                    @php
+                                        $displayCell = $cell;
+                                        if (is_numeric($cell)) {
+                                            $cellStr = (string)$cell;
+                                            if (strpos($cellStr, '.') !== false) {
+                                                $decimals = strlen(explode('.', $cellStr)[1]);
+                                                if ($decimals > 2) {
+                                                    $displayCell = number_format((float)$cell, 2, '.', '');
+                                                } else {
+                                                    $displayCell = rtrim(rtrim($cellStr, '0'), '.');
+                                                    if ($displayCell === '' || $displayCell === '-') {
+                                                        $displayCell = $cellStr;
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    @endphp
+                                    <td style="padding: 10px 12px; color: #334155;">{{ $displayCell }}</td>
                                 @endforeach
                             </tr>
                         @endforeach
@@ -353,8 +352,8 @@
     <div id="generating-overlay" class="modal-overlay">
         <div class="modal-box">
             <div class="modal-spinner"></div>
-            <h3>Generating Report</h3>
-            <p>Please wait while we process your request...</p>
+            <h3>Uploading File</h3>
+            <p>Please wait while we upload and import your records...</p>
         </div>
     </div>
 @endsection
@@ -444,44 +443,31 @@
                 });
             }
 
-            // Attendance Trends Chart
+            // Attendance Trends Chart (per semester, per subject)
             const attendanceCtx = document.getElementById('attendanceChart');
             if (attendanceCtx) {
                 const attendanceRaw = {!! json_encode($attendanceTrends) !!};
-                const labels = ['Week 1', 'Week 2', 'Week 3', 'Week 4'];
-                const palette = ['#8FB9E6', '#BFCFE2', '#C7D9EE', '#A9CDEB', '#DDEBF8', '#C8D6E0'];
-
-                const ctxA = attendanceCtx.getContext('2d');
-                function createGradient(color) {
-                    const g = ctxA.createLinearGradient(0, 0, 0, 300);
-                    g.addColorStop(0, color + '33');
-                    g.addColorStop(0.6, color + '1A');
-                    g.addColorStop(1, 'rgba(255,255,255,0)');
-                    return g;
-                }
-
-                const datasets = Array.isArray(attendanceRaw) ? attendanceRaw.slice(0, 6).map((t, i) => {
-                    const base = palette[i % palette.length];
-                    return {
-                        label: t.code || ('Subject ' + (i+1)),
-                        data: [t.week1 || 0, t.week2 || 0, t.week3 || 0, t.week4 || 0],
-                        borderColor: base,
-                        backgroundColor: createGradient(base),
-                        tension: 0.36,
-                        pointRadius: 3,
-                        pointHoverRadius: 6,
-                        fill: true,
-                        borderWidth: 2
-                    };
-                }) : [];
+                const labels = Array.isArray(attendanceRaw) ? attendanceRaw.map((t, i) => t.code || t.name || 'Subject ' + (i + 1)) : [];
+                const data = Array.isArray(attendanceRaw) ? attendanceRaw.map((t) => Number(t.attendance_percent || 0)) : [];
+                const barColor = 'rgba(34, 100, 178, 0.85)';
 
                 new Chart(attendanceCtx, {
-                    type: 'line',
-                    data: { labels: labels, datasets: datasets },
+                    type: 'bar',
+                    data: {
+                        labels: labels,
+                        datasets: [{
+                            label: 'Attendance % (Semester)',
+                            data: data,
+                            backgroundColor: labels.map(() => barColor),
+                            borderColor: 'rgba(30, 60, 140, 1)',
+                            borderWidth: 1,
+                            borderRadius: 6,
+                            maxBarThickness: 60
+                        }]
+                    },
                     options: {
                         responsive: true,
                         maintainAspectRatio: false,
-                        interaction: { mode: 'nearest', axis: 'x', intersect: false },
                         scales: {
                             y: {
                                 suggestedMin: 0,
@@ -492,7 +478,7 @@
                             x: { grid: { display: false } }
                         },
                         plugins: {
-                            legend: { position: 'bottom', labels: { boxWidth: 12, padding: 8 } }
+                            legend: { display: true, position: 'bottom' }
                         }
                     },
                     plugins: [{
@@ -549,6 +535,10 @@
                 confirmImportForm.addEventListener('submit', async function(e) {
                     e.preventDefault();
                     const overlay = document.getElementById('generating-overlay');
+                    const title = overlay.querySelector('h3');
+                    const message = overlay.querySelector('p');
+                    if (title) title.textContent = 'Uploading File';
+                    if (message) message.textContent = 'Please wait while we upload and import the file...';
                     overlay.classList.add('show');
                     
                     try {
@@ -564,7 +554,9 @@
                         
                         const data = await response.json();
                         if (data.success) {
-                            window.location.reload();
+                            overlay.classList.remove('show');
+                            showUploadToast('Uploaded successfully. Analytics are being generated.');
+                            setTimeout(() => window.location.reload(), 1200);
                         } else {
                             throw new Error(data.error || 'Failed to import records');
                         }
@@ -575,13 +567,38 @@
                 });
             }
         });
+
+        function showUploadToast(message) {
+            let toast = document.getElementById('uploadToast');
+            if (!toast) {
+                toast = document.createElement('div');
+                toast.id = 'uploadToast';
+                toast.style.position = 'fixed';
+                toast.style.bottom = '20px';
+                toast.style.right = '20px';
+                toast.style.zIndex = 99999;
+                toast.style.padding = '10px 16px';
+                toast.style.background = '#1e3c72';
+                toast.style.color = '#fff';
+                toast.style.borderRadius = '8px';
+                toast.style.boxShadow = '0 3px 10px rgba(0,0,0,0.2)';
+                toast.style.fontSize = '13px';
+                toast.style.opacity = '0';
+                toast.style.transition = 'opacity 0.3s ease';
+                document.body.appendChild(toast);
+            }
+            toast.textContent = message;
+            toast.style.opacity = '1';
+            setTimeout(() => {
+                toast.style.opacity = '0';
+            }, 3000);
+        }
     </script>
 
     <!-- Submitted Requirements -->
     <div class="section" style="margin-top: 30px; margin-bottom: 50px;">
         <div class="section-header">
             <h3 class="section-title">Submitted Requirements</h3>
-            <div style="font-size: 12px; color: #64748b;">Overview of your compliance and submissions</div>
         </div>
         <div style="overflow-x: auto;">
             <table style="width: 100%; border-collapse: collapse;">

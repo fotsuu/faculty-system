@@ -177,15 +177,6 @@
                 </div>
             </div>
 
-            <!-- Grade Distribution -->
-            <div class="section">
-                <div class="section-header">
-                    <h3 class="section-title">Grade Distribution</h3>
-                </div>
-                <div class="chart-container">
-                    <canvas id="gradesChart"></canvas>
-                </div>
-            </div>
         </div>
 
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 25px;">
@@ -194,7 +185,7 @@
                 <div class="section-header">
                     <div>
                         <h3 class="section-title">Attendance Trends</h3>
-                        <div class="section-subtitle">Average student attendance over the last 4 weeks</div>
+                        <div class="section-subtitle">Average student attendance for the current semester</div>
                     </div>
                 </div>
                 <div class="chart-container">
@@ -216,7 +207,7 @@
                             <div class="performer-rank">#{{ $index + 1 }}</div>
                             <div class="performer-info">
                                 <div class="performer-name">{{ $performer['name'] }}</div>
-                                <div class="performer-id">{{ $performer['student_id'] }} • {{ $performer['program'] }}</div>
+                                <div class="performer-id">{{ $performer['student_id'] }} • {{ $performer['subjects'] }}</div>
                             </div>
                             <div style="text-align: right;">
                                 <div class="performer-gpa">{{ $performer['gpa'] }}</div>
@@ -302,7 +293,7 @@
                                 <td>{{ $f->subjects_count }}</td>
                                 <td>{{ number_format($f->records_count) }}</td>
                                 <td>
-                                    <button class="btn" style="background:#f1f5f9; color:#1e3c72; padding:6px 12px; font-size:12px;">View Details</button>
+                                    <button class="btn" onclick="viewFacultyDetails('{{ $f->id }}', '{{ $f->name }}', '{{ $f->email }}', '{{ $f->department }}', '{{ $f->role }}', '{{ $f->subjects_count }}', '{{ $f->records_count }}')" style="background:#f1f5f9; color:#1e3c72; border:none; border-radius:4px; padding:6px 12px; font-size:12px; font-weight:700; cursor:pointer;">View Details</button>
                                 </td>
                             </tr>
                         @endforeach
@@ -314,37 +305,6 @@
 
     <!-- Reports Tab -->
     <div id="reports-tab" class="tab-content">
-        <div class="section" style="margin-bottom: 25px;">
-            <div class="section-header">
-                <div>
-                    <h3 class="section-title">Department Reports</h3>
-                    <div class="section-subtitle">View and monitor reports from your department</div>
-                </div>
-            </div>
-            <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px;">
-                <div style="background:#f8fafc; border-radius:12px; padding:24px; text-align:center; border:1px solid #edf2f7;">
-                    <div style="font-size:32px; margin-bottom:15px;">📋</div>
-                    <div style="font-size:14px; font-weight:700; color:#1e3c72; margin-bottom:8px;">Student Grade Report</div>
-                    <button type="button" onclick="viewFacultyReportPh('grade')" style="width:100%; padding:10px; background:#1e3c72; color:white; border:none; border-radius:8px; font-size:12px; font-weight:600; cursor:pointer;">Generate Now</button>
-                </div>
-                <div style="background:#f8fafc; border-radius:12px; padding:24px; text-align:center; border:1px solid #edf2f7;">
-                    <div style="font-size:32px; margin-bottom:15px;">📊</div>
-                    <div style="font-size:14px; font-weight:700; color:#1e3c72; margin-bottom:8px;">Pass/Fail Analysis</div>
-                    <button type="button" onclick="viewFacultyReportPh('passFailAnalysis')" style="width:100%; padding:10px; background:#1e3c72; color:white; border:none; border-radius:8px; font-size:12px; font-weight:600; cursor:pointer;">Generate Now</button>
-                </div>
-                <div style="background:#f8fafc; border-radius:12px; padding:24px; text-align:center; border:1px solid #edf2f7;">
-                    <div style="font-size:32px; margin-bottom:15px;">📅</div>
-                    <div style="font-size:14px; font-weight:700; color:#1e3c72; margin-bottom:8px;">Attendance Summary</div>
-                    <button type="button" onclick="viewFacultyReportPh('attendance')" style="width:100%; padding:10px; background:#1e3c72; color:white; border:none; border-radius:8px; font-size:12px; font-weight:600; cursor:pointer;">Generate Now</button>
-                </div>
-                <div style="background:#f8fafc; border-radius:12px; padding:24px; text-align:center; border:1px solid #edf2f7;">
-                    <div style="font-size:32px; margin-bottom:15px;">👥</div>
-                    <div style="font-size:14px; font-weight:700; color:#1e3c72; margin-bottom:8px;">Performance Summary</div>
-                    <button type="button" onclick="viewFacultyReportPh('lectureLabSummary')" style="width:100%; padding:10px; background:#1e3c72; color:white; border:none; border-radius:8px; font-size:12px; font-weight:600; cursor:pointer;">Generate Now</button>
-                </div>
-            </div>
-        </div>
-
         <div class="section">
             <div class="section-header">
                 <div>
@@ -431,10 +391,71 @@
             </div>
         </div>
     </div>
+
+    <!-- Faculty Details Modal -->
+    <div id="facultyDetailsModal" class="modal-overlay" style="display:none; position:fixed; inset:0; background:rgba(15, 23, 42, 0.6); z-index:10000; align-items:center; justify-content:center; backdrop-filter: blur(4px);">
+        <div style="background: white; border-radius: 16px; width: 90%; max-width: 500px; padding: 0; overflow: hidden; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);">
+            <div style="background: #1e3c72; padding: 24px; color: white; display: flex; justify-content: space-between; align-items: center;">
+                <h3 style="margin: 0; font-size: 18px; font-weight: 700;">Faculty Profile</h3>
+                <button type="button" onclick="closeFacultyModal()" style="background: none; border: none; color: white; font-size: 20px; cursor: pointer; opacity: 0.8;">✕</button>
+            </div>
+            
+            <div style="padding: 32px;">
+                <div style="display: flex; align-items: center; gap: 20px; margin-bottom: 30px; padding-bottom: 20px; border-bottom: 1px solid #f1f5f9;">
+                    <div style="width: 80px; height: 80px; background: #f1f5f9; border-radius: 50%; display: flex; align-items: center; justify-content: center; overflow: hidden;">
+                        <img id="facultyDetailAvatar" src="" style="width: 100%; height: 100%; object-fit: cover;">
+                    </div>
+                    <div>
+                        <h4 id="facultyDetailName" style="margin: 0 0 4px 0; font-size: 22px; font-weight: 800; color: #1e3c72;"></h4>
+                        <div id="facultyDetailRole" style="font-size: 13px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em;"></div>
+                    </div>
+                </div>
+
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px;">
+                    <div>
+                        <div style="font-size: 11px; font-weight: 700; color: #94a3b8; text-transform: uppercase; margin-bottom: 6px;">Email Address</div>
+                        <div id="facultyDetailEmail" style="font-size: 14px; font-weight: 600; color: #334155;"></div>
+                    </div>
+                    <div>
+                        <div style="font-size: 11px; font-weight: 700; color: #94a3b8; text-transform: uppercase; margin-bottom: 6px;">Department</div>
+                        <div id="facultyDetailDept" style="font-size: 14px; font-weight: 600; color: #334155;"></div>
+                    </div>
+                    <div style="background: #f8fafc; padding: 16px; border-radius: 12px; border: 1px solid #edf2f7;">
+                        <div style="font-size: 11px; font-weight: 700; color: #1e3c72; text-transform: uppercase; margin-bottom: 4px;">Active Subjects</div>
+                        <div id="facultyDetailSubjects" style="font-size: 24px; font-weight: 800; color: #1e3c72;"></div>
+                    </div>
+                    <div style="background: #f8fafc; padding: 16px; border-radius: 12px; border: 1px solid #edf2f7;">
+                        <div style="font-size: 11px; font-weight: 700; color: #1e3c72; text-transform: uppercase; margin-bottom: 4px;">Total Records</div>
+                        <div id="facultyDetailRecords" style="font-size: 24px; font-weight: 800; color: #1e3c72;"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div style="padding: 20px 32px; background: #f8fafc; border-top: 1px solid #f1f5f9; display: flex; justify-content: flex-end;">
+                <button type="button" onclick="closeFacultyModal()" style="padding: 10px 24px; background: #1e3c72; color: white; border: none; border-radius: 8px; font-weight: 700; font-size: 14px; cursor: pointer;">Close</button>
+            </div>
+        </div>
+    </div>
 @endsection
 
 @section('scripts')
 <script>
+    function viewFacultyDetails(id, name, email, dept, role, subjects, records) {
+        document.getElementById('facultyDetailName').textContent = name;
+        document.getElementById('facultyDetailEmail').textContent = email;
+        document.getElementById('facultyDetailDept').textContent = dept;
+        document.getElementById('facultyDetailRole').textContent = role.replace('_', ' ');
+        document.getElementById('facultyDetailSubjects').textContent = subjects;
+        document.getElementById('facultyDetailRecords').textContent = Number(records).toLocaleString();
+        document.getElementById('facultyDetailAvatar').src = `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=f1f5f9&color=1e3c72&size=128`;
+        
+        document.getElementById('facultyDetailsModal').style.display = 'flex';
+    }
+
+    function closeFacultyModal() {
+        document.getElementById('facultyDetailsModal').style.display = 'none';
+    }
+
     var pendingReportTypePh = null, pendingReportContentPh = null;
     
     function viewFacultyReportPh(reportType) {
@@ -449,37 +470,60 @@
         var timestamp = new Date().toLocaleString();
         var csv = 'Department Report - ' + timestamp + '\n\n';
         var subjects = @json($subjects ?? []);
+        var topStudents = @json($topStudents ?? []);
         var passFailRates = @json($passFailRates ?? []);
         var attendanceTrends = @json($attendanceTrends ?? []);
         var analytics = @json($analytics ?? []);
+        var gradeDistribution = @json($gradeDistribution ?? []);
         
         switch(reportType) {
             case 'grade':
-                csv += 'Student Grade Summary\nSubject Code,Student ID,Student Name,Grade\n';
-                if (topStudents) {
+                csv += 'Student Grade Summary Report\n';
+                csv += 'Generated: ' + timestamp + '\n\n';
+                csv += 'Subject Code,Student ID,Student Name,Grade\n';
+                if (topStudents && topStudents.length > 0) {
                     topStudents.forEach(function(s) {
                         csv += '"' + (s.program||'') + '","' + (s.student_id||'') + '","' + (s.name||'') + '","' + (s.gpa||'') + '"\n';
                     });
+                } else {
+                    csv += 'No student data available\n';
                 }
                 break;
             case 'passFailAnalysis':
-                csv += 'Pass/Fail Analysis\nSubject Code,Total,Passed,Failed,Pass Rate (%)\n';
-                passFailRates.forEach(function(r) { 
-                    var t = (r.pass||0)+(r.fail||0); 
-                    csv += '"' + (r.code||'') + '","' + t + '","' + (r.pass||0) + '","' + (r.fail||0) + '","' + (t ? Math.round((r.pass/t)*100) : 0) + '"\n'; 
-                });
+                csv += 'Pass/Fail Analysis Report\n';
+                csv += 'Generated: ' + timestamp + '\n\n';
+                csv += 'Subject Code,Total,Passed,Failed,Pass Rate (%)\n';
+                if (passFailRates && passFailRates.length > 0) {
+                    passFailRates.forEach(function(r) { 
+                        var t = (r.pass||0)+(r.fail||0); 
+                        csv += '"' + (r.code||'') + '","' + t + '","' + (r.pass||0) + '","' + (r.fail||0) + '","' + (t ? Math.round((r.pass/t)*100) : 0) + '"\n'; 
+                    });
+                } else {
+                    csv += 'No pass/fail data available\n';
+                }
                 break;
             case 'attendance':
-                csv += 'Attendance Report\nSubject Code,Week 1,Week 2,Week 3,Week 4,Average\n';
-                attendanceTrends.forEach(function(t) { 
-                    csv += '"' + (t.code||'') + '","' + (t.week1||0) + '","' + (t.week2||0) + '","' + (t.week3||0) + '","' + (t.week4||0) + '","' + (t.average||0) + '"\n'; 
-                });
+                csv += 'Attendance Report\n';
+                csv += 'Generated: ' + timestamp + '\n\n';
+                csv += 'Subject Code,Average Attendance\n';
+                if (attendanceTrends && attendanceTrends.length > 0) {
+                    attendanceTrends.forEach(function(t) { 
+                        csv += '"' + (t.code||'') + '","' + (t.average||0).toFixed(2) + '%"\n'; 
+                    });
+                } else {
+                    csv += 'No attendance data available\n';
+                }
                 break;
             case 'lectureLabSummary':
-                csv += 'Performance Summary\nType,Average Score,Count\n';
-                if (analytics.examAnalytics) {
-                    csv += '"Midterm","' + analytics.examAnalytics.midterm.avg_score + '","' + analytics.examAnalytics.midterm.count + '"\n';
-                    csv += '"Final","' + analytics.examAnalytics.final.avg_score + '","' + analytics.examAnalytics.final.count + '"\n';
+                csv += 'Performance Summary Report\n';
+                csv += 'Generated: ' + timestamp + '\n\n';
+                csv += 'Grade,Count\n';
+                if (gradeDistribution && Object.keys(gradeDistribution).length > 0) {
+                    Object.keys(gradeDistribution).forEach(function(grade) {
+                        csv += '"Grade ' + grade + '","' + gradeDistribution[grade] + '"\n';
+                    });
+                } else {
+                    csv += 'No grade distribution data available\n';
                 }
                 break;
         }
@@ -511,48 +555,42 @@
             });
         }
 
-        // Attendance Chart
+        // Attendance Chart (per semester, per subject)
         const aEl = document.getElementById('attendanceChart');
         if (aEl) {
             const attendanceRaw = {!! json_encode($attendanceTrends) !!};
-            const labels = ['Week 1', 'Week 2', 'Week 3', 'Week 4'];
-            const palette = ['#8FB9E6', '#BFCFE2', '#C7D9EE', '#A9CDEB', '#DDEBF8', '#C8D6E0'];
-
-            const ctxA = aEl.getContext('2d');
-            function createGradient(color) {
-                const g = ctxA.createLinearGradient(0, 0, 0, 300);
-                g.addColorStop(0, color + '33');
-                g.addColorStop(0.6, color + '1A');
-                g.addColorStop(1, 'rgba(255,255,255,0)');
-                return g;
-            }
-
-            const datasets = attendanceRaw.slice(0, 6).map((t, i) => {
-                const base = palette[i % palette.length];
-                return {
-                    label: t.code || ('Subject ' + (i+1)),
-                    data: [t.week1 || 0, t.week2 || 0, t.week3 || 0, t.week4 || 0],
-                    borderColor: base,
-                    backgroundColor: createGradient(base),
-                    tension: 0.36,
-                    pointRadius: 3,
-                    pointHoverRadius: 6,
-                    fill: true,
-                    borderWidth: 2
-                };
-            });
+            const labels = Array.isArray(attendanceRaw) ? attendanceRaw.map((t, i) => t.code || t.name || 'Subject ' + (i + 1)) : [];
+            const data = Array.isArray(attendanceRaw) ? attendanceRaw.map((t) => Number(t.attendance_percent || 0)) : [];
+            const barColor = 'rgba(34, 100, 178, 0.85)';
 
             new Chart(aEl, {
-                type: 'line',
-                data: { labels: labels, datasets: datasets },
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Attendance % (Semester)',
+                        data: data,
+                        backgroundColor: labels.map(() => barColor),
+                        borderColor: 'rgba(30, 60, 140, 1)',
+                        borderWidth: 1,
+                        borderRadius: 6,
+                        maxBarThickness: 60
+                    }]
+                },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
                     scales: {
-                        y: { suggestedMin: 0, suggestedMax: 100, ticks: { callback: v => v + '%' }, grid: { color: 'rgba(200,210,220,0.1)' } }
+                        y: {
+                            suggestedMin: 0,
+                            suggestedMax: 100,
+                            ticks: { callback: v => v + '%' },
+                            grid: { color: 'rgba(200,210,220,0.25)', borderDash: [4,4] }
+                        },
+                        x: { grid: { display: false } }
                     },
                     plugins: {
-                        legend: { position: 'bottom', labels: { boxWidth: 12, padding: 8 } }
+                        legend: { display: true, position: 'bottom' }
                     }
                 },
                 plugins: [{
@@ -569,52 +607,21 @@
             });
         }
 
-        // Grades Chart
-        const gEl = document.getElementById('gradesChart');
-        if (gEl) {
-            const raw = @json($gradeDistribution);
-            const grades = ['A','B','C','D','F'];
-            const values = grades.map(k => Number(raw[k] || 0));
-            const colors = ['#A9CDEB', '#C8DDE2', '#E7E6C8', '#EAD7C2', '#E9D6D6'];
-            
-            const ctxG = gEl.getContext('2d');
-            function grad(col) {
-                const g = ctxG.createLinearGradient(0, 0, 0, 300);
-                g.addColorStop(0, col + '');
-                g.addColorStop(0.6, 'rgba(255,255,255,0.6)');
-                g.addColorStop(1, 'rgba(255,255,255,0)');
-                return g;
-            }
+        // Performance (next code continues)
 
-            new Chart(gEl, {
-                type: 'bar',
-                data: {
-                    labels: grades.map(g => 'Grade ' + g),
-                    datasets: [{
-                        label: 'Students',
-                        data: values,
-                        backgroundColor: colors.map(c => grad(c)),
-                        borderColor: colors,
-                        borderWidth: 1,
-                        borderRadius: 6,
-                        maxBarThickness: 72
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    scales: {
-                        y: { beginAtZero: true, ticks: { precision: 0 }, grid: { color: 'rgba(200,210,220,0.1)' } }
+                        y: { suggestedMin: 0, suggestedMax: 100, ticks: { callback: v => v + '%' }, grid: { color: 'rgba(200,210,220,0.1)' } }
                     },
-                    plugins: { legend: { display: false } }
+                    plugins: {
+                        legend: { position: 'bottom', labels: { boxWidth: 12, padding: 8 } }
+                    }
                 },
                 plugins: [{
-                    id: 'barShadow',
+                    id: 'softShadow',
                     beforeDatasetsDraw(chart) {
                         const ctx = chart.ctx;
                         ctx.save();
-                        ctx.shadowColor = 'rgba(0,0,0,0.12)';
-                        ctx.shadowBlur = 16;
+                        ctx.shadowColor = 'rgba(0,0,0,0.08)';
+                        ctx.shadowBlur = 18;
                         ctx.shadowOffsetY = 8;
                     },
                     afterDatasetsDraw(chart) { chart.ctx.restore(); }

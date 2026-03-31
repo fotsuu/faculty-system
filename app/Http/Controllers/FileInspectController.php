@@ -27,8 +27,9 @@ class FileInspectController extends Controller
                     }
                 }
                 
-                // Read worksheet
-                $xml = $zip->getFromName('xl/worksheets/sheet1.xml');
+                // Read class record worksheet (multi-sheet workbooks supported)
+                $sheetPath = $this->resolveClassRecordSheetPath($zip) ?? 'xl/worksheets/sheet1.xml';
+                $xml = $zip->getFromName($sheetPath);
                 $zip->close();
                 
                 if ($xml) {
@@ -66,5 +67,56 @@ class FileInspectController extends Controller
         }
         
         return $rows;
+    }
+
+    private function resolveClassRecordSheetPath(\ZipArchive $zip)
+    {
+        $workbookXml = $zip->getFromName('xl/workbook.xml');
+        if (!$workbookXml) {
+            return null;
+        }
+
+        try {
+            $wbDoc = new \SimpleXMLElement($workbookXml);
+            $targetRid = null;
+            foreach ($wbDoc->sheets->sheet as $sheet) {
+                $sheetName = (string)$sheet['name'];
+                if ($sheetName !== '' && stripos($sheetName, 'class record') !== false) {
+                    $targetRid = (string)$sheet['r:id'];
+                    break;
+                }
+            }
+
+            if (!$targetRid) {
+                foreach ($wbDoc->sheets->sheet as $sheet) {
+                    $sheetName = (string)$sheet['name'];
+                    if ($sheetName !== '' && (stripos($sheetName, 'record') !== false || stripos($sheetName, 'class') !== false)) {
+                        $targetRid = (string)$sheet['r:id'];
+                        break;
+                    }
+                }
+            }
+
+            if (!$targetRid) {
+                return null;
+            }
+
+            $relsXml = $zip->getFromName('xl/_rels/workbook.xml.rels');
+            if (!$relsXml) {
+                return null;
+            }
+
+            $relsDoc = new \SimpleXMLElement($relsXml);
+            foreach ($relsDoc->Relationship as $rel) {
+                if ((string)$rel['Id'] === $targetRid) {
+                    $target = (string)$rel['Target'];
+                    return 'xl/' . ltrim($target, '/');
+                }
+            }
+        } catch (\Exception $e) {
+            return null;
+        }
+
+        return null;
     }
 }

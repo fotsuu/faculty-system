@@ -215,15 +215,6 @@
                 </div>
             </div>
 
-            <!-- Grade Distribution -->
-            <div class="section">
-                <div class="section-header">
-                    <h3 class="section-title">Grade Distribution</h3>
-                </div>
-                <div class="chart-container">
-                    <canvas id="gradesChart"></canvas>
-                </div>
-            </div>
         </div>
 
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-bottom: 25px;">
@@ -232,7 +223,7 @@
                 <div class="section-header">
                     <div>
                         <h3 class="section-title">Attendance Trends</h3>
-                        <div class="section-subtitle">Institutional student attendance over the last 4 weeks</div>
+                        <div class="section-subtitle">Institutional student attendance for the current semester</div>
                     </div>
                 </div>
                 <div class="chart-container">
@@ -327,7 +318,7 @@
                         <tr>
                             <th>Name</th>
                             <th>Email</th>
-                            <th>Department</th>
+                            <th>Program</th>
                             <th>Active Subjects</th>
                             <th>Total Records</th>
                             <th>Actions</th>
@@ -362,37 +353,6 @@
 
     <!-- Reports Tab -->
     <div id="reports-tab" class="tab-content">
-        <div class="section" style="margin-bottom: 25px;">
-            <div class="section-header">
-                <div>
-                    <h3 class="section-title">Institutional Reports</h3>
-                    <div class="section-subtitle">View and monitor reports from all departments</div>
-                </div>
-            </div>
-            <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px;">
-                <div style="background:#f8fafc; border-radius:12px; padding:24px; text-align:center; border:1px solid #edf2f7;">
-                    <div style="font-size:32px; margin-bottom:15px;">📋</div>
-                    <div style="font-size:14px; font-weight:700; color:#1e3c72; margin-bottom:8px;">Institutional Grade Report</div>
-                    <button type="button" onclick="viewDeanReport('grade')" style="width:100%; padding:10px; background:#1e3c72; color:white; border:none; border-radius:8px; font-size:12px; font-weight:600; cursor:pointer;">Generate Now</button>
-                </div>
-                <div style="background:#f8fafc; border-radius:12px; padding:24px; text-align:center; border:1px solid #edf2f7;">
-                    <div style="font-size:32px; margin-bottom:15px;">📊</div>
-                    <div style="font-size:14px; font-weight:700; color:#1e3c72; margin-bottom:8px;">Global Pass/Fail Analysis</div>
-                    <button type="button" onclick="viewDeanReport('passFailAnalysis')" style="width:100%; padding:10px; background:#1e3c72; color:white; border:none; border-radius:8px; font-size:12px; font-weight:600; cursor:pointer;">Generate Now</button>
-                </div>
-                <div style="background:#f8fafc; border-radius:12px; padding:24px; text-align:center; border:1px solid #edf2f7;">
-                    <div style="font-size:32px; margin-bottom:15px;">📅</div>
-                    <div style="font-size:14px; font-weight:700; color:#1e3c72; margin-bottom:8px;">Institutional Attendance</div>
-                    <button type="button" onclick="viewDeanReport('attendance')" style="width:100%; padding:10px; background:#1e3c72; color:white; border:none; border-radius:8px; font-size:12px; font-weight:600; cursor:pointer;">Generate Now</button>
-                </div>
-                <div style="background:#f8fafc; border-radius:12px; padding:24px; text-align:center; border:1px solid #edf2f7;">
-                    <div style="font-size:32px; margin-bottom:15px;">👥</div>
-                    <div style="font-size:14px; font-weight:700; color:#1e3c72; margin-bottom:8px;">Performance Summary</div>
-                    <button type="button" onclick="viewDeanReport('lectureLabSummary')" style="width:100%; padding:10px; background:#1e3c72; color:white; border:none; border-radius:8px; font-size:12px; font-weight:600; cursor:pointer;">Generate Now</button>
-                </div>
-            </div>
-        </div>
-
         <div class="section">
             <div class="section-header">
                 <div>
@@ -406,7 +366,7 @@
                         <tr>
                             <th>Report Title</th>
                             <th>Faculty Member</th>
-                            <th>Department</th>
+                            <th>Program</th>
                             <th>Type</th>
                             <th>Date</th>
                             <th>Actions</th>
@@ -534,54 +494,6 @@
 
 @section('scripts')
 <script>
-    var pendingReportType = null, pendingReportContent = null;
-    
-    function viewDeanReport(reportType) {
-        var csv = generateReportCSV(reportType);
-        pendingReportType = reportType;
-        pendingReportContent = csv;
-        document.getElementById('reportContentPreview').textContent = csv;
-        document.getElementById('reportSuccessModal').classList.add('show');
-    }
-
-    function generateReportCSV(reportType) {
-        var timestamp = new Date().toLocaleString();
-        var csv = 'Institutional Report - ' + timestamp + '\n\n';
-        var passFailRates = @json($passFailRates ?? []);
-        var attendanceTrends = @json($attendanceTrends ?? []);
-        var analytics = @json($analytics ?? []);
-        
-        switch(reportType) {
-            case 'grade':
-                csv += 'Student Grade Summary\nStudent ID,Student Name,Program,GPA\n';
-                @json($topStudents ?? []).forEach(function(s) {
-                    csv += '"' + (s.student_id||'') + '","' + (s.name||'') + '","' + (s.program||'') + '","' + (s.gpa||'') + '"\n';
-                });
-                break;
-            case 'passFailAnalysis':
-                csv += 'Institutional Pass/Fail Analysis\nSubject Code,Total,Passed,Failed,Pass Rate (%)\n';
-                passFailRates.forEach(function(r) { 
-                    var t = (r.pass||0)+(r.fail||0); 
-                    csv += '"' + (r.code||'') + '","' + t + '","' + (r.pass||0) + '","' + (r.fail||0) + '","' + (t ? Math.round((r.pass/t)*100) : 0) + '"\n'; 
-                });
-                break;
-            case 'attendance':
-                csv += 'Institutional Attendance Report\nSubject Code,Week 1,Week 2,Week 3,Week 4,Average\n';
-                attendanceTrends.forEach(function(t) { 
-                    csv += '"' + (t.code||'') + '","' + (t.week1||0) + '","' + (t.week2||0) + '","' + (t.week3||0) + '","' + (t.week4||0) + '","' + (t.average||0) + '"\n'; 
-                });
-                break;
-            case 'lectureLabSummary':
-                csv += 'Institutional Performance Summary\nType,Average Score,Count\n';
-                if (analytics.examAnalytics) {
-                    csv += '"Midterm","' + analytics.examAnalytics.midterm.avg_score + '","' + analytics.examAnalytics.midterm.count + '"\n';
-                    csv += '"Final","' + analytics.examAnalytics.final.avg_score + '","' + analytics.examAnalytics.final.count + '"\n';
-                }
-                break;
-        }
-        return csv;
-    }
-
     document.addEventListener('DOMContentLoaded', function() {
         // Institutional Pass/Fail pie
         const el = document.getElementById('passFailChart');
@@ -607,44 +519,59 @@
             });
         }
 
-        // Institutional Attendance Chart
+        // Institutional Attendance Chart (per semester)
         const aEl = document.getElementById('attendanceChart');
         if (aEl) {
             const attendanceRaw = {!! json_encode($attendanceTrends) !!};
-            const labels = ['Week 1', 'Week 2', 'Week 3', 'Week 4'];
-            const palette = ['#8FB9E6', '#BFCFE2', '#C7D9EE', '#A9CDEB', '#DDEBF8', '#C8D6E0'];
-
-            const ctxA = aEl.getContext('2d');
-            function createGradient(color) {
-                const g = ctxA.createLinearGradient(0, 0, 0, 300);
-                g.addColorStop(0, color + '33');
-                g.addColorStop(0.6, color + '1A');
-                g.addColorStop(1, 'rgba(255,255,255,0)');
-                return g;
-            }
-
-            const datasets = attendanceRaw.slice(0, 6).map((t, i) => {
-                const base = palette[i % palette.length];
-                return {
-                    label: t.code || ('Subject ' + (i+1)),
-                    data: [t.week1 || 0, t.week2 || 0, t.week3 || 0, t.week4 || 0],
-                    borderColor: base,
-                    backgroundColor: createGradient(base),
-                    tension: 0.36,
-                    pointRadius: 3,
-                    pointHoverRadius: 6,
-                    fill: true,
-                    borderWidth: 2
-                };
-            });
+            const labels = Array.isArray(attendanceRaw) ? attendanceRaw.map((t, i) => t.code || t.name || 'Subject ' + (i + 1)) : [];
+            const data = Array.isArray(attendanceRaw) ? attendanceRaw.map((t) => Number(t.attendance_percent || 0)) : [];
+            const barColor = 'rgba(34, 100, 178, 0.85)';
 
             new Chart(aEl, {
-                type: 'line',
-                data: { labels: labels, datasets: datasets },
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Attendance % (Semester)',
+                        data: data,
+                        backgroundColor: labels.map(() => barColor),
+                        borderColor: 'rgba(30, 60, 140, 1)',
+                        borderWidth: 1,
+                        borderRadius: 6,
+                        maxBarThickness: 60
+                    }]
+                },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
                     scales: {
+                        y: {
+                            suggestedMin: 0,
+                            suggestedMax: 100,
+                            ticks: { callback: v => v + '%' },
+                            grid: { color: 'rgba(200,210,220,0.25)', borderDash: [4,4] }
+                        },
+                        x: { grid: { display: false } }
+                    },
+                    plugins: {
+                        legend: { display: true, position: 'bottom' }
+                    }
+                },
+                plugins: [{
+                    id: 'softShadow',
+                    beforeDatasetsDraw(chart) {
+                        const ctx = chart.ctx;
+                        ctx.save();
+                        ctx.shadowColor = 'rgba(0,0,0,0.08)';
+                        ctx.shadowBlur = 18;
+                        ctx.shadowOffsetY = 8;
+                    },
+                    afterDatasetsDraw(chart) { chart.ctx.restore(); }
+                }]
+            });
+        }
+
+        // (Next code follows)
                         y: { suggestedMin: 0, suggestedMax: 100, ticks: { callback: v => v + '%' }, grid: { color: 'rgba(200,210,220,0.1)' } }
                     },
                     plugins: {
@@ -665,70 +592,7 @@
             });
         }
 
-        // Institutional Grade Distribution Chart
-        const gEl = document.getElementById('gradesChart');
-        if (gEl) {
-            const raw = @json($gradeDistribution);
-            const grades = ['A','B','C','D','F'];
-            const values = grades.map(k => Number(raw[k] || 0));
-            const colors = ['#A9CDEB', '#C8DDE2', '#E7E6C8', '#EAD7C2', '#E9D6D6'];
-            
-            const ctxG = gEl.getContext('2d');
-            function grad(col) {
-                const g = ctxG.createLinearGradient(0, 0, 0, 300);
-                g.addColorStop(0, col + '');
-                g.addColorStop(0.6, 'rgba(255,255,255,0.6)');
-                g.addColorStop(1, 'rgba(255,255,255,0)');
-                return g;
-            }
-
-            new Chart(gEl, {
-                type: 'bar',
-                data: {
-                    labels: grades.map(g => 'Grade ' + g),
-                    datasets: [{
-                        label: 'Students',
-                        data: values,
-                        backgroundColor: colors.map(c => grad(c)),
-                        borderColor: colors,
-                        borderWidth: 1,
-                        borderRadius: 6,
-                        maxBarThickness: 72
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    scales: {
-                        y: { beginAtZero: true, ticks: { precision: 0 }, grid: { color: 'rgba(200,210,220,0.1)' } }
-                    },
-                    plugins: { legend: { display: false } }
-                },
-                plugins: [{
-                    id: 'barShadow',
-                    beforeDatasetsDraw(chart) {
-                        const ctx = chart.ctx;
-                        ctx.save();
-                        ctx.shadowColor = 'rgba(0,0,0,0.12)';
-                        ctx.shadowBlur = 16;
-                        ctx.shadowOffsetY = 8;
-                    },
-                    afterDatasetsDraw(chart) { chart.ctx.restore(); }
-                }]
-            });
-        }
-
-        document.getElementById('reportModalDownload').addEventListener('click', function() {
-            if (pendingReportContent && pendingReportType) {
-                var blob = new Blob([pendingReportContent], { type: 'text/csv;charset=utf-8;' });
-                var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'dean_' + pendingReportType + '_' + new Date().toISOString().slice(0,10) + '.csv'; a.click();
-            }
-            document.getElementById('reportSuccessModal').classList.remove('show');
-        });
-
-        document.getElementById('reportModalCancel').addEventListener('click', function() {
-            document.getElementById('reportSuccessModal').classList.remove('show');
-        });
+        // Grade distribution chart removed per specification.
     });
 </script>
 @endsection

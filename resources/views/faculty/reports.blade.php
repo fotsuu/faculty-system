@@ -9,6 +9,7 @@
             <h1 style="font-size: 24px; font-weight: 800; color: #1e3c72; margin-bottom: 8px;">System Reports</h1>
             <p style="font-size: 14px; color: #64748b;">Generate and manage your reports (ROG)</p>
         </div>
+        <a href="{{ route('faculty.submitted-reports') }}" style="background: #0891b2; color: white; text-decoration: none; padding: 10px 20px; border-radius: 8px; font-weight: 600; font-size: 13px;">View Submitted Reports →</a>
     </div>
 
 
@@ -63,12 +64,17 @@
                             </td>
                             <td style="padding: 16px; text-align: center;">
                                 <div style="display: flex; gap: 8px; justify-content: center;">
-                                    <a href="{{ route('faculty.reports.view', $report) }}" style="background: #f1f5f9; color: #1e3c72; text-decoration: none; padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 600;">View</a>
+                                    <button onclick="openReportModal({{ $report->id }})" style="background: #f1f5f9; color: #1e3c72; border: none; padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer;">View</button>
                                     <a href="{{ route('faculty.reports.download', $report) }}" style="background: #f1f5f9; color: #1e3c72; text-decoration: none; padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 600;">CSV</a>
-                                    <form action="{{ route('faculty.reports.submit', $report) }}" method="POST" style="display: inline;">
-                                        @csrf
-                                        <button type="submit" style="background: #1e3c72; color: white; border: none; padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer;">Submit</button>
-                                    </form>
+                                    
+                                    @if($report->submitted_at)
+                                        <div style="background: #dcfce7; color: #166534; padding: 6px 12px; border-radius: 6px; font-size: 11px; font-weight: 700; display: flex; flex-direction: column; align-items: center; min-width: 100px;">
+                                            <span>Submitted</span>
+                                            <span style="font-size: 9px; opacity: 0.8;">to {{ $report->recipient->name ?? 'Head' }}</span>
+                                        </div>
+                                    @else
+                                        <button type="button" onclick="openSubmitModal({{ $report->id }})" style="background: #1e3c72; color: white; border: none; padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer;">Submit</button>
+                                    @endif
                                 </div>
                             </td>
                         </tr>
@@ -88,29 +94,85 @@
 
     <!-- Performance Report Modal -->
     <div id="performanceReportModal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(15, 23, 42, 0.6); z-index: 2000; align-items: center; justify-content: center; padding: 20px;">
-        <div style="background: white; border-radius: 16px; max-width: 1100px; width: 100%; max-height: 90vh; display: flex; flex-direction: column; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);">
-            <div style="padding: 24px; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center;">
-                <div>
-                    <h2 style="font-size: 20px; font-weight: 700; color: #1e3c72; margin: 0;">Report of Grades (ROG) - Student Performance</h2>
-                    <p style="font-size: 13px; color: #64748b; margin: 4px 0 0 0;">Generated on {{ now()->format('M d, Y • h:i A') }}</p>
+        <!-- ... existing performance modal content ... -->
+    </div>
+
+    <!-- Submit Report Selection Modal -->
+    <div id="submitReportModal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(15, 23, 42, 0.6); z-index: 2000; align-items: center; justify-content: center; padding: 20px;">
+        <div style="background: white; border-radius: 16px; max-width: 500px; width: 100%; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1); overflow: hidden;">
+            <div style="padding: 20px 24px; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; background: #f8fafc;">
+                <h3 style="font-size: 18px; font-weight: 700; color: #1e3c72; margin: 0;">Select Recipient</h3>
+                <button type="button" onclick="closeSubmitModal()" style="background: none; border: none; font-size: 20px; cursor: pointer; color: #94a3b8;">✕</button>
+            </div>
+            
+            <form id="submitReportForm" method="POST">
+                @csrf
+                <div style="padding: 24px;">
+                    <p style="font-size: 14px; color: #64748b; margin-bottom: 20px;">Who would you like to submit this report to?</p>
+                    
+                    <div style="display: flex; flex-direction: column; gap: 12px;">
+                        @foreach($recipients as $recipient)
+                        <label style="display: flex; align-items: center; padding: 16px; border: 2px solid #e2e8f0; border-radius: 12px; cursor: pointer; transition: all 0.2s ease;" onmouseover="this.style.borderColor='#1e3c72'" onmouseout="if(!this.querySelector('input').checked) this.style.borderColor='#e2e8f0'">
+                            <input type="radio" name="recipient_id" value="{{ $recipient->id }}" required style="margin-right: 15px; width: 18px; height: 18px;">
+                            <div style="flex: 1;">
+                                <div style="font-weight: 700; color: #1e3c72;">{{ $recipient->name }}</div>
+                                <div style="font-size: 12px; color: #64748b;">
+                                    @if($recipient->role === 'dean')
+                                        Dean of College
+                                    @else
+                                        Program Head ({{ $recipient->department }})
+                                    @endif
+                                </div>
+                            </div>
+                        </label>
+                        @endforeach
+                    </div>
                 </div>
-                <button type="button" onclick="closePerformanceModal()" style="background: none; border: none; font-size: 24px; cursor: pointer; color: #94a3b8;">✕</button>
-            </div>
 
-            <div id="reportModalContent" style="flex: 1; overflow-y: auto; padding: 32px; background: #f8fafc;">
-                <!-- Content loaded dynamically -->
-            </div>
+                <div style="padding: 16px 24px; background: #f8fafc; border-top: 1px solid #e2e8f0; display: flex; justify-content: flex-end; gap: 12px;">
+                    <button type="button" onclick="closeSubmitModal()" style="padding: 10px 20px; background: white; border: 1px solid #e2e8f0; border-radius: 8px; font-weight: 600; color: #64748b; cursor: pointer;">Cancel</button>
+                    <button type="submit" style="padding: 10px 24px; background: #1e3c72; border: none; border-radius: 8px; font-weight: 600; color: white; cursor: pointer;">Confirm Submission</button>
+                </div>
+            </form>
+        </div>
+    </div>
 
-            <div style="padding: 20px 24px; border-top: 1px solid #e2e8f0; display: flex; gap: 12px; justify-content: flex-end; background: white;">
-                <button type="button" onclick="closePerformanceModal()" style="padding: 10px 24px; background: #f1f5f9; color: #1e3c72; border: none; border-radius: 8px; font-weight: 600; cursor: pointer;">Close</button>
-                <button type="button" onclick="downloadPerformanceReport()" style="padding: 10px 24px; background: #1e3c72; color: white; border: none; border-radius: 8px; font-weight: 600; cursor: pointer;">Download CSV</button>
-            </div>
+    <!-- View Report Modal -->
+    <div id="viewReportModal" style="display: none; position: fixed; inset: 0; z-index: 4000; background: rgba(0,0,0,0.55); align-items: center; justify-content: center; padding: 20px;">
+        <div style="position: relative; width: 100%; height: calc(100% - 40px); max-width: 1200px; background: white; border-radius: 12px; box-shadow: 0 15px 40px rgba(0,0,0,0.35); overflow: hidden;">
+            <button onclick="closeReportModal()" style="position: absolute; top: 12px; right: 12px; z-index: 20; background: #1e3c72; color: white; border: none; border-radius: 6px; padding: 8px 12px; font-weight: 700; cursor: pointer;">✕ Close</button>
+            <iframe id="reportIframe" src="about:blank" style="width: 100%; height: 100%; border: none;" sandbox="allow-same-origin allow-scripts allow-popups allow-forms"></iframe>
         </div>
     </div>
 @endsection
 
 @section('scripts')
     <script>
+        function openSubmitModal(reportId) {
+            const modal = document.getElementById('submitReportModal');
+            const form = document.getElementById('submitReportForm');
+            form.action = `/faculty/reports/${reportId}/submit`;
+            modal.style.display = 'flex';
+        }
+
+        function closeSubmitModal() {
+            document.getElementById('submitReportModal').style.display = 'none';
+        }
+
+        function openReportModal(reportId) {
+            const modal = document.getElementById('viewReportModal');
+            const frame = document.getElementById('reportIframe');
+            frame.src = `/faculty/reports/${reportId}/view?embedded=1`;
+            modal.style.display = 'flex';
+        }
+
+        function closeReportModal() {
+            const modal = document.getElementById('viewReportModal');
+            const frame = document.getElementById('reportIframe');
+            frame.src = 'about:blank';
+            modal.style.display = 'none';
+        }
+
         document.getElementById('reportSearch')?.addEventListener('input', function() {
             const searchTerm = this.value.toLowerCase();
             const rows = document.querySelectorAll('#reportsTable tbody tr');

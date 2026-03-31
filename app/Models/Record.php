@@ -12,6 +12,7 @@ class Record extends Model
     protected $fillable = [
         'user_id',
         'subject_id',
+        'section',
         'student_id',
         'file_path',
         'file_name',

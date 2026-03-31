@@ -244,6 +244,105 @@
             box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
         }
         
+        /* Logout Confirmation Modal */
+        .logout-modal-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(15, 23, 42, 0.6);
+            z-index: 10000;
+            align-items: center;
+            justify-content: center;
+            backdrop-filter: blur(4px);
+            animation: fadeIn 0.2s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        .logout-modal {
+            background: white;
+            border-radius: 16px;
+            width: 90%;
+            max-width: 400px;
+            padding: 32px;
+            text-align: center;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+            transform: scale(0.95);
+            animation: scaleUp 0.2s ease forwards;
+        }
+
+        @keyframes scaleUp {
+            to { transform: scale(1); }
+        }
+
+        .logout-icon {
+            width: 64px;
+            height: 64px;
+            background: #fef2f2;
+            color: #dc2626;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 20px;
+        }
+
+        .logout-title {
+            font-size: 20px;
+            font-weight: 700;
+            color: #1e293b;
+            margin-bottom: 8px;
+        }
+
+        .logout-text {
+            font-size: 14px;
+            color: #64748b;
+            margin-bottom: 28px;
+            line-height: 1.5;
+        }
+
+        .logout-actions {
+            display: flex;
+            gap: 12px;
+        }
+
+        .logout-btn-cancel {
+            flex: 1;
+            padding: 12px;
+            background: #f1f5f9;
+            color: #475569;
+            border: none;
+            border-radius: 10px;
+            font-weight: 600;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .logout-btn-confirm {
+            flex: 1;
+            padding: 12px;
+            background: #1e3c72;
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-weight: 600;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .logout-btn-confirm:hover {
+            background: #162e5a;
+        }
+
+        .logout-btn-cancel:hover {
+            background: #e2e8f0;
+        }
+
         @yield('styles')
         @stack('styles')
     </style>
@@ -307,17 +406,14 @@
             </div>
 
             <div class="sidebar-footer">
-                <form action="{{ route('logout') }}" method="POST">
-                    @csrf
-                    <button type="submit" style="width: 100%; display: flex; align-items: center; padding: 12px 15px; background: none; border: none; color: rgba(255, 255, 255, 0.8); cursor: pointer; font-size: 14px; font-weight: 500; transition: all 0.3s ease; border-radius: 8px;" onmouseover="this.style.backgroundColor='rgba(255, 255, 255, 0.1)'; this.style.color='white';" onmouseout="this.style.backgroundColor='transparent'; this.style.color='rgba(255, 255, 255, 0.8)';">
-                        <div class="sidebar-menu-icon">
-                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                            </svg>
-                        </div>
-                        Logout
-                    </button>
-                </form>
+                <button type="button" onclick="confirmLogout()" style="width: 100%; display: flex; align-items: center; padding: 12px 15px; background: none; border: none; color: rgba(255, 255, 255, 0.8); cursor: pointer; font-size: 14px; font-weight: 500; transition: all 0.3s ease; border-radius: 8px;" onmouseover="this.style.backgroundColor='rgba(255, 255, 255, 0.1)'; this.style.color='white';" onmouseout="this.style.backgroundColor='transparent'; this.style.color='rgba(255, 255, 255, 0.8)';">
+                    <div class="sidebar-menu-icon">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                        </svg>
+                    </div>
+                    Logout
+                </button>
             </div>
         </div>
         
@@ -342,10 +438,46 @@
         </div>
     </div>
 
+    <!-- Logout Confirmation Modal -->
+    <div id="logoutModal" class="logout-modal-overlay">
+        <div class="logout-modal">
+            <div class="logout-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                </svg>
+            </div>
+            <h3 class="logout-title">Confirm Logout</h3>
+            <p class="logout-text">Are you sure you want to log out of your account? You will need to log in again to access the system.</p>
+            <div class="logout-actions">
+                <button type="button" class="logout-btn-cancel" onclick="closeLogoutModal()">Cancel</button>
+                <form action="{{ route('logout') }}" method="POST" style="flex: 1;">
+                    @csrf
+                    <button type="submit" class="logout-btn-confirm">Logout</button>
+                </form>
+            </div>
+        </div>
+    </div>
+
     @yield('scripts')
     @stack('scripts')
     
     <script>
+        function confirmLogout() {
+            document.getElementById('logoutModal').style.display = 'flex';
+        }
+
+        function closeLogoutModal() {
+            document.getElementById('logoutModal').style.display = 'none';
+        }
+
+        // Close modal when clicking outside
+        window.onclick = function(event) {
+            const modal = document.getElementById('logoutModal');
+            if (event.target === modal) {
+                closeLogoutModal();
+            }
+        }
+
         function switchTab(event, tabId) {
             if (event) event.preventDefault();
             

@@ -62,10 +62,11 @@ class ImportExcelFile extends Command
             ]
         );
         
-        // Read worksheet
-        $xml = $zip->getFromName('xl/worksheets/sheet1.xml');
+        // Read class record worksheet (multi-sheet workbook support)
+        $sheetPath = $this->resolveClassRecordSheetPath($zip) ?? 'xl/worksheets/sheet1.xml';
+        $xml = $zip->getFromName($sheetPath);
         $zip->close();
-        
+
         if (!$xml) {
             $this->error("Cannot read worksheet");
             return 1;
@@ -75,64 +76,89 @@ class ImportExcelFile extends Command
         $rowCount = 0;
         $importedCount = 0;
         
+        $headerRowDetected = false;
+
         foreach ($doc->sheetData->row as $row) {
             $data = [];
             foreach ($row->c as $cell) {
                 $cellValue = '';
-                
-                // Check if cell references shared strings
+
                 if (isset($cell['t']) && (string)$cell['t'] === 's') {
                     $stringIndex = (int)$cell->v;
                     $cellValue = $sharedStrings[$stringIndex] ?? '';
                 } else {
                     $cellValue = (string)$cell->v;
                 }
-                
+
                 $data[] = $cellValue;
             }
-            
-            // Skip header rows (first 10 rows based on the Excel structure)
-            if ($rowCount >= 10 && count($data) > 0) {
-                $data = array_map('trim', $data);
-                $data = array_filter($data, fn($x) => !is_null($x) && $x !== '');
-                $data = array_values($data);
-                
-                if (count($data) >= 2) {
-                    $studentId = $data[0] ?? null;
-                    $studentName = $data[1] ?? 'Unknown';
-                    $course = $data[2] ?? 'BSIT';
-                    $grade = $data[count($data) - 1] ?? null; // Last column is usually the grade
-                    
-                    if ($studentId) {
-                        // Find or create student
-                        $student = Student::firstOrCreate(
-                            ['student_id' => $studentId],
-                            [
-                                'name' => $studentName,
-                                'email' => strtolower(str_replace(' ', '.', $studentName)) . '@student.edu',
-                                'program' => $course,
-                            ]
-                        );
-                        
-                        // Create record
-                        $record = Record::firstOrCreate(
-                            [
-                                'user_id' => $user->id,
-                                'subject_id' => $subject->id,
-                                'student_id' => $student->id,
-                            ],
-                            [
-                                'file_name' => basename($filePath),
-                                'notes' => $grade ? "Grade: $grade" : 'Imported from upload',
-                            ]
-                        );
-                        
-                        $this->line("✓ Student: {$studentName} ($studentId) - Grade: {$grade}");
-                        $importedCount++;
-                    }
+
+            if (!$headerRowDetected) {
+                $lowerData = array_map(fn($v) => strtolower(trim((string)$v)), $data);
+                $hasStudent = false;
+                $hasName = false;
+                $hasRemarks = false;
+
+                foreach ($lowerData as $val) {
+                    if ($val === '') continue;
+                    if (str_contains($val, 'student')) $hasStudent = true;
+                    if (str_contains($val, 'name')) $hasName = true;
+                    if (str_contains($val, 'remark')) $hasRemarks = true;
                 }
+
+                if (($hasName && ($hasStudent || $hasRemarks)) || ($hasStudent && $hasRemarks)) {
+                    $headerRowDetected = true;
+                    $rowCount++;
+                    continue;
+                }
+
+                $rowCount++;
+                continue;
             }
-            
+
+            $firstCell = strtolower(trim($data[0] ?? ''));
+            if (str_contains($firstCell, 'prepared by') || str_contains($firstCell, 'faculty') || str_contains($firstCell, 'total')) {
+                break;
+            }
+
+            $trimmedData = array_map('trim', $data);
+            $notEmpty = array_filter($trimmedData, fn($x) => $x !== '');
+            if (count($notEmpty) < 2) {
+                $rowCount++;
+                continue;
+            }
+
+            $studentId = trim($data[0] ?? '');
+            $studentName = trim($data[1] ?? 'Unknown');
+            $course = trim($data[2] ?? 'BSIT');
+            $grade = trim($data[count($data) - 1] ?? '');
+
+            if ($studentId !== '') {
+                $student = Student::firstOrCreate(
+                    ['student_id' => $studentId],
+                    [
+                        'name' => $studentName,
+                        'email' => strtolower(str_replace(' ', '.', $studentName)) . '@student.edu',
+                        'program' => $course,
+                    ]
+                );
+
+                Record::firstOrCreate(
+                    [
+                        'user_id' => $user->id,
+                        'subject_id' => $subject->id,
+                        'student_id' => $student->id,
+                    ],
+                    [
+                        'file_name' => basename($filePath),
+                        'notes' => $grade ? "Grade: $grade" : 'Imported from upload',
+                    ]
+                );
+
+                $this->line("✓ Student: {$studentName} ({$studentId}) - Grade: {$grade}");
+                $importedCount++;
+            }
+
             $rowCount++;
         }
         
@@ -147,5 +173,57 @@ class ImportExcelFile extends Command
         $this->info("Records for user: $recordCount");
         
         return 0;
+    }
+
+    private function resolveClassRecordSheetPath(\ZipArchive $zip)
+    {
+        $workbookXml = $zip->getFromName('xl/workbook.xml');
+        if (!$workbookXml) {
+            return null;
+        }
+
+        try {
+            $wbDoc = new \SimpleXMLElement($workbookXml);
+            $targetRid = null;
+            foreach ($wbDoc->sheets->sheet as $sheet) {
+                $sheetName = (string) $sheet['name'];
+                if ($sheetName !== '' && stripos($sheetName, 'class record') !== false) {
+                    $targetRid = (string) $sheet['r:id'];
+                    break;
+                }
+            }
+
+            if (!$targetRid) {
+                foreach ($wbDoc->sheets->sheet as $sheet) {
+                    $sheetName = (string) $sheet['name'];
+                    if ($sheetName !== '' && (stripos($sheetName, 'record') !== false || stripos($sheetName, 'class') !== false)) {
+                        $targetRid = (string) $sheet['r:id'];
+                        break;
+                    }
+                }
+            }
+
+            if (!$targetRid) {
+                return null;
+            }
+
+            $relsXml = $zip->getFromName('xl/_rels/workbook.xml.rels');
+            if (!$relsXml) {
+                return null;
+            }
+
+            $relsDoc = new \SimpleXMLElement($relsXml);
+            foreach ($relsDoc->Relationship as $rel) {
+                if ((string) $rel['Id'] === $targetRid) {
+                    $target = (string) $rel['Target'];
+                    return 'xl/' . ltrim($target, '/');
+                }
+            }
+        } catch (\Exception $e) {
+            $this->error('Could not resolve class record sheet path: ' . $e->getMessage());
+            return null;
+        }
+
+        return null;
     }
 }

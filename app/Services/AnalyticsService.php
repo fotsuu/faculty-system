@@ -46,7 +46,9 @@ class AnalyticsService
     {
         return [
             'passFailRates' => $this->getPassFailRates(),
+            'passFailByYearLevel' => $this->getPassFailRatesByYearLevel(),
             'gradeDistribution' => $this->getGradeDistribution(),
+            'gradeDistributionByYearLevel' => $this->getGradeDistributionByYearLevel(),
             'attendanceTrends' => $this->getAttendanceTrends(),
             'quizAnalytics' => $this->getQuizAnalytics(),
             'examAnalytics' => $this->getExamAnalytics(),
@@ -180,66 +182,191 @@ class AnalyticsService
     /**
      * Get attendance trends per subject
      */
+    public function getPassFailRatesByYearLevel()
+    {
+        $yearLevels = Student::distinct()->pluck('year_level')->filter()->values();
+        $result = [];
+
+        foreach ($yearLevels as $yearLevel) {
+            $records = Record::whereHas('student', fn($q) => $q->where('year_level', $yearLevel));
+            $records = $this->applyUserFilter($records)->get();
+
+            $passCount = $records->filter(fn($r) => !is_null($r->grade_point) && $r->grade_point > 0 && $r->grade_point <= 3.0)->count();
+            $otherPass = $records->filter(function($r) {
+                if (!is_null($r->grade_point)) return false;
+                if (is_null($r->numeric_grade)) return false;
+                $val = (float)$r->numeric_grade;
+                return ($val >= 75 && $val <= 100) || ($val >= 1.0 && $val <= 3.0);
+            })->count();
+            $totalPass = $passCount + $otherPass;
+            $total = $records->count();
+
+            $result[$yearLevel] = [
+                'year_level' => $yearLevel,
+                'pass' => $totalPass,
+                'fail' => $total - $totalPass,
+                'total' => $total,
+                'pass_rate' => $total > 0 ? round(($totalPass / $total) * 100, 1) : 0,
+            ];
+        }
+
+        return $result;
+    }
+
+    public function getGradeDistributionByYearLevel()
+    {
+        $yearLevels = Student::distinct()->pluck('year_level')->filter()->values();
+        $result = [];
+
+        foreach ($yearLevels as $yearLevel) {
+            $records = Record::whereHas('student', fn($q) => $q->where('year_level', $yearLevel));
+            $records = $this->applyUserFilter($records)->get();
+
+            $distribution = ['A' => 0, 'B' => 0, 'C' => 0, 'D' => 0, 'F' => 0];
+            foreach ($records as $record) {
+                $gp = $record->grade_point;
+                if ($gp !== null && $gp > 0) {
+                    if ($gp <= 1.25) {
+                        $distribution['A']++;
+                    } elseif ($gp <= 1.75) {
+                        $distribution['B']++;
+                    } elseif ($gp <= 2.5) {
+                        $distribution['C']++;
+                    } elseif ($gp <= 3.0) {
+                        $distribution['D']++;
+                    } else {
+                        $distribution['F']++;
+                    }
+                }
+            }
+
+            $result[$yearLevel] = [
+                'year_level' => $yearLevel,
+                'distribution' => $distribution,
+                'total' => $records->count(),
+            ];
+        }
+
+        return $result;
+    }
+
+    /**
+     * Get attendance trends per subject
+     */
     public function getAttendanceTrends()
     {
+        // Per-semester attendance computed from recorded StudentAttendance entries.
+        // If missing, fallback to legacy Record.scores attendance parsing.
         $subjects = Subject::query();
         $subjects = $this->applyUserFilter($subjects)->get();
-        
+
         return $subjects->map(function ($subject) {
             $attendanceQuery = StudentAttendance::where('subject_id', $subject->id);
             $attendanceQuery = $this->applyUserFilter($attendanceQuery);
             $attendances = $attendanceQuery->get();
 
-            if ($attendances->count() > 0) {
-                $presentCount = $attendances->where('status', 'present')->count();
-                $lateCount = $attendances->where('status', 'late')->count();
-                $absentCount = $attendances->where('status', 'absent')->count();
-                $excusedCount = $attendances->where('status', 'excused')->count();
-                $totalPossible = $attendances->count();
+            $presentCount = $attendances->where('status', 'present')->count();
+            $lateCount = $attendances->where('status', 'late')->count();
+            $absentCount = $attendances->where('status', 'absent')->count();
+            $excusedCount = $attendances->where('status', 'excused')->count();
+            $totalPossible = $attendances->count();
 
-                $attendancePercent = $totalPossible > 0 ? round((($presentCount + $lateCount * 0.5) / $totalPossible) * 100, 1) : 0;
-
-                $sessionAverages = $attendances->groupBy('session_number')->map(function($group) {
-                    $p = $group->where('status', 'present')->count();
-                    $l = $group->where('status', 'late')->count();
-                    return ($group->count() > 0) ? ($p + $l * 0.5) / $group->count() * 100 : 0;
-                })->values()->toArray();
-
-                return $this->formatTrendArray($subject, $attendancePercent, $sessionAverages, [
-                    'total' => $totalPossible,
-                    'present' => $presentCount,
-                    'late' => $lateCount,
-                    'absent' => $absentCount,
-                    'excused' => $excusedCount,
-                ]);
+            if ($totalPossible === 0) {
+                $fallback = $this->computeAttendanceFromRecordScoresBySubject($subject->id);
+                $presentCount = $fallback['present'];
+                $lateCount = $fallback['late'];
+                $absentCount = $fallback['absent'];
+                $excusedCount = $fallback['excused'];
+                $totalPossible = $fallback['total'];
             }
 
-            // Try to extract from Record scores
-            $extracted = $this->extractDetailedAttendance($subject->id);
-            $totalPossible = $extracted['total_possible'];
-            $presentCount = $extracted['total_present'];
-            $lateCount = $extracted['total_late'] ?? 0;
-            $excusedCount = $extracted['total_excused'] ?? 0;
-            $absentCount = max(0, $totalPossible - $presentCount - $lateCount - $excusedCount);
+            $attendancePercent = $totalPossible > 0 ? round((($presentCount + $lateCount * 0.5) / $totalPossible) * 100, 1) : 0;
 
-            if ($totalPossible > 0) {
-                return $this->formatTrendArray($subject, $extracted['average'], $extracted['session_averages'], [
-                    'total' => $totalPossible,
-                    'present' => $presentCount,
-                    'late' => $lateCount,
-                    'absent' => $absentCount,
-                    'excused' => $excusedCount,
-                ]);
-            }
-
-            return $this->formatTrendArray($subject, 0, [], [
-                'total' => 0,
-                'present' => 0,
-                'late' => 0,
-                'absent' => 0,
-                'excused' => 0,
-            ]);
+            return [
+                'code' => $subject->code,
+                'name' => $subject->name,
+                'attendance_percent' => $attendancePercent,
+                'present' => $presentCount,
+                'late' => $lateCount,
+                'absent' => $absentCount,
+                'excused' => $excusedCount,
+                'total' => $totalPossible,
+            ];
         })->toArray();
+    }
+
+    private function computeAttendanceFromRecordScoresBySubject($subjectId)
+    {
+        $records = Record::where('subject_id', $subjectId);
+        $records = $this->applyUserFilter($records)->get();
+
+        $presentCount = 0;
+        $lateCount = 0;
+        $absentCount = 0;
+        $excusedCount = 0;
+        $total = 0;
+
+        foreach ($records as $record) {
+            $scores = $record->scores;
+            if (!is_array($scores) || empty($scores)) {
+                continue;
+            }
+
+            foreach ($scores as $column => $value) {
+                if (!$this->isAttendanceColumn($column)) {
+                    continue;
+                }
+
+                $status = $this->categorizeAttendanceStatus($value);
+                $total++;
+
+                switch ($status) {
+                    case 'present':
+                        $presentCount++;
+                        break;
+                    case 'late':
+                        $lateCount++;
+                        break;
+                    case 'excused':
+                        $excusedCount++;
+                        break;
+                    default:
+                        $absentCount++;
+                        break;
+                }
+            }
+        }
+
+        return [
+            'present' => $presentCount,
+            'late' => $lateCount,
+            'absent' => $absentCount,
+            'excused' => $excusedCount,
+            'total' => $total,
+        ];
+    }
+
+    private function isAttendanceColumn($column)
+    {
+        $lower = trim(strtolower((string)$column));
+
+        if (preg_match('/\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}/', $lower) || preg_match('/^[a-z]{3}[-\s]\d{1,2}/', $lower)) {
+            return true;
+        }
+
+        if (preg_match('/^(a|att|attendance|day|week|session|l|a)\s*\d+$/i', $column) || preg_match('/^[la]\d+$/i', $column)) {
+            return true;
+        }
+
+        if (preg_match('/^(p[\s]*\/[\s]*a|a[\s]*\/[\s]*p|present[\s]*\/[\s]*absent|absent[\s]*\/[\s]*present)$/i', $column)) {
+            return true;
+        }
+
+        if (preg_match('/attendance|present|absent|roll|mark/i', $column) && !preg_match('/total|equivalent|grade/i', $column)) {
+            return true;
+        }
+
+        return false;
     }
 
     private function formatTrendArray($subject, $average, $sessionAverages = [], $attendanceData = [])
@@ -293,18 +420,18 @@ class AnalyticsService
                     $isAttendanceColumn = true;
                 }
                 
-                // Pattern 2: Lab/Activity session markers (L1, L2, A1, A2, Lab1, etc.)
-                if (preg_match('/^(l|a|lab|activity|session)\s*\d+$/i', $column)) {
+                // Pattern 2: session markers (A1, A2, Att1, Day 1, Week1, Session1, L1/L2)
+                if (preg_match('/^(a|att|attendance|day|week|session|l|a)\s*\d+$/i', $column) || preg_match('/^[la]\d+$/i', $column)) {
+                    $isAttendanceColumn = true;
+                }
+
+                // Pattern 3: P/A or presence/absence markers
+                if (preg_match('/^(p[\s]*\/[\s]*a|a[\s]*\/[\s]*p|present[\s]*\/[\s]*absent|absent[\s]*\/[\s]*present)$/i', $column)) {
                     $isAttendanceColumn = true;
                 }
                 
-                // Pattern 3: Generic session columns (Session 1, Week 1, Day 1, etc.)
-                if (preg_match('/^(session|week|day|class)\s*\d+$/i', $column)) {
-                    $isAttendanceColumn = true;
-                }
-                
-                // Pattern 4: Attendance/Presence/Roll columns
-                if (preg_match('/attendance|present|absent|roll|mark/i', $column)) {
+                // Pattern 4: Explicit Attendance/Presence/Roll columns
+                if (preg_match('/attendance|present|absent|roll|mark/i', $column) && !preg_match('/total|equivalent|grade/i', $column)) {
                     $isAttendanceColumn = true;
                 }
                 
@@ -347,7 +474,7 @@ class AnalyticsService
         
         foreach ($sessionData as $session) {
             if ($session['total'] > 0) {
-                $sessionAverages[] = ($session['present'] / $session['total']) * 100;
+                $sessionAverages[] = (($session['present'] + ($session['late'] * 0.5)) / $session['total']) * 100;
                 $totalPresent += $session['present'];
                 $totalLate += $session['late'] ?? 0;
                 $totalAbsent += $session['absent'] ?? 0;
@@ -356,7 +483,7 @@ class AnalyticsService
             }
         }
 
-        $average = $totalPossible > 0 ? ($totalPresent / $totalPossible) * 100 : 0;
+        $average = $totalPossible > 0 ? (($totalPresent + ($totalLate * 0.5)) / $totalPossible) * 100 : 0;
 
         return [
             'session_averages' => $sessionAverages,
@@ -371,14 +498,15 @@ class AnalyticsService
 
     private function categorizeAttendanceStatus($value)
     {
-        $normalized = trim(strtolower((string)$value));
+        $raw = trim((string)$value);
+        $normalized = strtolower($raw);
 
-        if ($normalized === '') {
+        if ($normalized === '' || $normalized === '-' || $normalized === 'n/a' || $normalized === 'na') {
             return 'absent';
         }
 
-        if (is_numeric($value)) {
-            $numeric = (float)$value;
+        if (is_numeric($raw)) {
+            $numeric = (float)$raw;
             if ($numeric >= 1) {
                 return 'present';
             }
@@ -388,10 +516,25 @@ class AnalyticsService
             return 'absent';
         }
 
-        if (in_array($normalized, ['present', 'p', 'yes', 'y'], true)) {
+        if (strpos($normalized, '/') !== false) {
+            $parts = preg_split('/\s*\/\s*/', $normalized);
+            if (count($parts) === 2) {
+                if (in_array($parts[0], ['p', 'present'], true)) {
+                    return 'present';
+                }
+                if (in_array($parts[0], ['a', 'absent'], true)) {
+                    return 'absent';
+                }
+                if (is_numeric($parts[0]) && is_numeric($parts[1])) {
+                    return (float)$parts[0] > 0 ? 'present' : 'absent';
+                }
+            }
+        }
+
+        if (in_array($normalized, ['present', 'p', 'yes', 'y', 'x', '/'], true)) {
             return 'present';
         }
-        if (in_array($normalized, ['late', 'l'], true)) {
+        if (in_array($normalized, ['late', 'l', 't'], true)) {
             return 'late';
         }
         if (in_array($normalized, ['excused', 'exc', 'e'], true)) {
@@ -723,10 +866,22 @@ class AnalyticsService
      */
     private function arrayToCSV($headers, $rows)
     {
-        $csv = implode(',', array_map(fn($h) => "\"$h\"", $headers)) . "\n";
+        $csv = implode(',', array_map(function ($h) {
+            // Ensure headers are scalar strings for CSV.
+            if (is_array($h) || is_object($h)) return '"' . str_replace('"', '""', json_encode($h)) . '"';
+            return '"' . str_replace('"', '""', (string)$h) . '"';
+        }, $headers)) . "\n";
         
         foreach ($rows as $row) {
-            $csv .= implode(',', array_map(fn($v) => "\"" . str_replace('"', '""', $v) . "\"", $row)) . "\n";
+            $csv .= implode(',', array_map(function ($v) {
+                // If a value is accidentally an array, stringify it to prevent "Array to string conversion".
+                if (is_array($v) || is_object($v)) {
+                    $v = json_encode($v, JSON_UNESCAPED_UNICODE);
+                }
+                if ($v === null) $v = '';
+                $str = str_replace('"', '""', (string)$v);
+                return '"' . $str . '"';
+            }, $row)) . "\n";
         }
         
         return $csv;

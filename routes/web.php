@@ -113,6 +113,7 @@ Route::middleware('auth')->prefix('faculty')->name('faculty.')->group(function (
 
     // Upload route to accept CSV/XLS/XLSX uploads
     Route::post('/records/upload', [\App\Http\Controllers\RecordUploadController::class, 'upload'])->name('records.upload');
+    Route::post('/records/cancel-preview', [\App\Http\Controllers\RecordUploadController::class, 'cancelPreview'])->name('records.cancel-preview');
     
     // Get student grades detail by student_id string
     Route::get('/students/{studentId}/grades', [DashboardController::class, 'getStudentGrades'])->name('students.grades');
@@ -122,6 +123,7 @@ Route::middleware('auth')->prefix('faculty')->name('faculty.')->group(function (
     Route::get('/reports/{report}/download', [DashboardController::class, 'downloadReport'])->name('reports.download');
     Route::get('/reports/{report}/view', [DashboardController::class, 'viewReport'])->name('reports.view');
     Route::post('/reports/{report}/submit', [DashboardController::class, 'submitReport'])->name('reports.submit');
+    Route::get('/submitted-reports', [DashboardController::class, 'submittedReports'])->name('submitted-reports');
     Route::post('/analytics/generate', [DashboardController::class, 'generateAnalytics'])->name('analytics.generate');
 
     Route::get('/settings', [DashboardController::class, 'settings'])->name('settings');

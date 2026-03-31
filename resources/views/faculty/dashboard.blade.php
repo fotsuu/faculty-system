@@ -661,157 +661,6 @@
     </div>
     
     <!-- Analytics Section -->
-    <div class="charts-container">
-        <div class="chart-section">
-            <div class="section-header">
-                <div class="section-title">Detailed Analytics</div>
-                <div class="section-subtitle">Comprehensive performance metrics</div>
-            </div>
-            
-            <div class="chart-tabs">
-                <button class="chart-tab active" onclick="showChart('pass-fail', this)">Pass/Fail Rates</button>
-                <button class="chart-tab" onclick="showChart('attendance', this)">Attendance Trends</button>
-                <button class="chart-tab" onclick="showChart('grades', this)">Grade Distribution</button>
-            </div>
-            
-            <!-- Pass/Fail Rates Chart -->
-            <div id="pass-fail-chart" class="chart-content" style="display: block;">
-                @php
-                    $pf = collect($passFailRates);
-                    $totalPass = $pf->sum('pass');
-                    $totalFail = $pf->sum('fail');
-                    $totalAll = $totalPass + $totalFail;
-                    $passPercent = $totalAll ? round(($totalPass / $totalAll) * 100, 1) : 0;
-                @endphp
-
-                <div style="display:flex; gap:18px; align-items:center; padding:14px; background:#fff; border-radius:8px; box-shadow:0 1px 3px rgba(0,0,0,0.04);">
-                    <div style="width:260px; height:260px; position:relative;">
-                        <canvas id="passFailChart" width="260" height="260"></canvas>
-                        <div style="position:absolute; left:0; top:0; right:0; bottom:0; display:flex; align-items:center; justify-content:center; flex-direction:column; pointer-events:none;">
-                            <div style="font-size:20px; font-weight:700; color:#1e3c72;">{{ $passPercent }}%</div>
-                            <div style="font-size:12px; color:#666; margin-top:4px;">Pass Rate</div>
-                        </div>
-                    </div>
-
-                    <div style="flex:1;">
-                        <h3 style="margin:0;font-size:16px;color:#1e3c72;">Pass / Fail Overview</h3>
-                        <p style="margin:6px 0 12px 0;color:#666;font-size:13px;">Total Passed vs Failed across active subjects.</p>
-
-                        <div style="display:flex; gap:12px; align-items:center; margin-bottom:10px;">
-                            <div style="width:8px;height:8px;background:#6EA8DA;border-radius:2px;margin-right:6px;"></div>
-                            <div style="font-weight:600;color:#333;">Passed: {{ $totalPass }}</div>
-                            <div style="margin-left:12px;color:#666;">({{ $totalAll ? round(($totalPass/$totalAll)*100,1) : 0 }}%)</div>
-                        </div>
-                        <div style="display:flex; gap:12px; align-items:center; margin-bottom:12px;">
-                            <div style="width:8px;height:8px;background:#D9A6A6;border-radius:2px;margin-right:6px;"></div>
-                            <div style="font-weight:600;color:#333;">Failed: {{ $totalFail }}</div>
-                            <div style="margin-left:12px;color:#666;">({{ $totalAll ? round(($totalFail/$totalAll)*100,1) : 0 }}%)</div>
-                        </div>
-
-                        <div style="margin-top:8px;">
-                            <div style="font-size:13px;color:#444;font-weight:600;margin-bottom:6px;">Subjects breakdown</div>
-                            <ul style="list-style:none;padding:0;margin:0;max-height:160px;overflow:auto;">
-                                @foreach($pf as $r)
-                                @php $t = ($r['pass'] ?? 0) + ($r['fail'] ?? 0); $pr = $t ? round((($r['pass'] ?? 0)/$t)*100,1) : 0; @endphp
-                                <li style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px dashed #f3f3f3;font-size:13px;">
-                                    <span style="color:#333;">{{ $r['code'] }}</span>
-                                    <span style="color:#666;">{{ $r['pass'] }} / {{ $r['fail'] }} • {{ $pr }}%</span>
-                                </li>
-                                @endforeach
-                            </ul>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Attendance Trends Chart -->
-            <div id="attendance-chart" class="chart-content">
-                @php
-                    $att = is_array($attendanceTrends) ? $attendanceTrends : (method_exists($attendanceTrends, 'toArray') ? $attendanceTrends->toArray() : []);
-                @endphp
-                <div style="display:flex; gap:18px; align-items:flex-start; padding:12px; background:#fff; border-radius:8px; box-shadow:0 1px 3px rgba(0,0,0,0.04);">
-                    <div style="flex:1; min-width:0;">
-                        <div style="height:320px;">
-                            <canvas id="attendanceChart" width="800" height="320"></canvas>
-                        </div>
-                        <div style="margin-top:8px; font-size:13px; color:#666;">Shows per-week attendance trends for each subject. Hover for exact values. Dashed baseline marks the semester average.</div>
-                    </div>
-
-                    <div style="width:260px;">
-                        <div style="padding:14px; background:#f9f9f9; border-radius:8px;">
-                            <h4 style="margin:0 0 12px 0; font-size:14px; color:#1e3c72;">Attendance Summary</h4>
-                            @foreach($att as $t)
-                            <div style="margin-bottom:12px; padding-bottom:10px; border-bottom:1px solid #eee;">
-                                <div style="display:flex; justify-content:space-between; font-size:12px; margin-bottom:4px;">
-                                    <span style="font-weight:600; color:#333;">{{ $t['code'] }}</span>
-                                    <span style="color:#1e3c72; font-weight:700;">{{ $t['average'] }}%</span>
-                                </div>
-                                <div style="width:100%; height:4px; background:#e9e9e9; border-radius:2px;">
-                                    <div style="width:{{ $t['average'] }}%; height:100%; background:#8FB9E6; border-radius:2px;"></div>
-                                </div>
-                            </div>
-                            @endforeach
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Grade Distribution Chart -->
-            <div id="grades-chart" class="chart-content">
-                <div style="height: 300px; display: flex; align-items: center; justify-content: center; background: #f9f9f9; border-radius: 8px;">
-                    <canvas id="gradeDistributionChart"></canvas>
-                </div>
-            </div>
-        </div>
-        
-        <div class="chart-section">
-            <div class="section-header">
-                <div class="section-title">Quick Reports</div>
-                <div class="section-subtitle">Generate exportable data</div>
-            </div>
-            
-            <div class="report-grid" style="grid-template-columns: 1fr; gap: 15px;">
-                <div class="report-card" style="display: flex; align-items: center; text-align: left; padding: 15px;">
-                    <div class="report-icon" style="margin: 0 15px 0 0; font-size: 24px;">📝</div>
-                    <div style="flex: 1;">
-                        <div class="report-name">Grade Report</div>
-                        <div class="report-desc" style="margin-bottom: 0;">Full student grade summary</div>
-                    </div>
-                    <button class="btn btn-secondary" onclick="generateReport('grade')" style="padding: 6px 12px; font-size: 11px;">Generate</button>
-                </div>
-                
-                <div class="report-card" style="display: flex; align-items: center; text-align: left; padding: 15px;">
-                    <div class="report-icon" style="margin: 0 15px 0 0; font-size: 24px;">📈</div>
-                    <div style="flex: 1;">
-                        <div class="report-name">Pass/Fail Analysis</div>
-                        <div class="report-desc" style="margin-bottom: 0;">Subject-wise analysis</div>
-                    </div>
-                    <button class="btn btn-secondary" onclick="generateReport('passFailAnalysis')" style="padding: 6px 12px; font-size: 11px;">Generate</button>
-                </div>
-                
-                <div class="report-card" style="display: flex; align-items: center; text-align: left; padding: 15px;">
-                    <div class="report-icon" style="margin: 0 15px 0 0; font-size: 24px;">🗓️</div>
-                    <div style="flex: 1;">
-                        <div class="report-name">Attendance</div>
-                        <div class="report-desc" style="margin-bottom: 0;">Monthly attendance log</div>
-                    </div>
-                    <button class="btn btn-secondary" onclick="generateReport('attendance')" style="padding: 6px 12px; font-size: 11px;">Generate</button>
-                </div>
-                
-                <div class="report-card" style="display: flex; align-items: center; text-align: left; padding: 15px;">
-                    <div class="report-icon" style="margin: 0 15px 0 0; font-size: 24px;">📋</div>
-                    <div style="flex: 1;">
-                        <div class="report-name">Lecture vs Lab</div>
-                        <div class="report-desc" style="margin-bottom: 0;">Performance comparison</div>
-                    </div>
-                    <button class="btn btn-secondary" onclick="generateReport('lectureLabSummary')" style="padding: 6px 12px; font-size: 11px;">Generate</button>
-                </div>
-            </div>
-            
-            <a href="{{ route('faculty.reports') }}" class="view-all-link" style="text-align: center; margin-top: 20px;">View All Generated Reports →</a>
-        </div>
-    </div>
-
     <!-- Modals -->
     <div id="generatingModal" class="modal-overlay">
         <div class="modal-box">
@@ -840,7 +689,25 @@
                         @foreach($excelPreviewData['rows'] ?? [] as $row)
                             <tr>
                                 @foreach($row as $cell)
-                                    <td>{{ $cell }}</td>
+                                    @php
+                                        $displayCell = $cell;
+                                        if (is_numeric($cell)) {
+                                            $cellStr = (string)$cell;
+                                            if (strpos($cellStr, '.') !== false) {
+                                                $decimals = strlen(explode('.', $cellStr)[1]);
+                                                if ($decimals > 2) {
+                                                    $displayCell = number_format((float)$cell, 2, '.', '');
+                                                } else {
+                                                    // preserve original decimal precision as in source
+                                                    $displayCell = rtrim(rtrim($cellStr, '0'), '.');
+                                                    if ($displayCell === '' || $displayCell === '-') {
+                                                        $displayCell = $cellStr;
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    @endphp
+                                    <td>{{ $displayCell }}</td>
                                 @endforeach
                             </tr>
                         @endforeach
@@ -946,7 +813,28 @@
                     }
                 });
             }
-            if (excelPreviewCancel) excelPreviewCancel.addEventListener('click', function() { if (excelPreviewModal) excelPreviewModal.classList.remove('show'); });
+            if (excelPreviewCancel) excelPreviewCancel.addEventListener('click', async function() {
+                // Close modal first
+                if (excelPreviewModal) excelPreviewModal.classList.remove('show');
+                
+                // Clear the session data and file on backend
+                try {
+                    const token = document.querySelector('meta[name="csrf-token"]').getAttribute('content');
+                    await fetch('{{ route("faculty.records.cancel-preview") }}', {
+                        method: 'POST',
+                        headers: {
+                            'X-CSRF-TOKEN': token,
+                            'Accept': 'application/json',
+                        },
+                    });
+                } catch (e) {
+                    console.error('Error cancelling preview:', e);
+                }
+                
+                // Clear file input if it exists on the current page
+                const fileInputs = document.querySelectorAll('input[type="file"][name="file"]');
+                fileInputs.forEach(input => input.value = '');
+            });
 
             // Charts
             const pfEl = document.getElementById('passFailChart');
@@ -1003,28 +891,6 @@
                 });
             }
 
-            const gdEl = document.getElementById('gradeDistributionChart');
-            if (gdEl) {
-                const gd = {!! json_encode($gradeDistribution ?? []) !!};
-                new Chart(gdEl, {
-                    type: 'bar',
-                    data: {
-                        labels: Object.keys(gd),
-                        datasets: [{
-                            label: 'Students',
-                            data: Object.values(gd),
-                            backgroundColor: '#1e3c72',
-                            borderRadius: 4
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        scales: {
-                            y: { beginAtZero: true, ticks: { stepSize: 1 } }
-                        }
-                    }
-                });
-            }
         });
 
         function generateSelectedReport() {
