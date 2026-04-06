@@ -47,7 +47,7 @@
         </div>
 
         @php
-            $useExcel = !empty($excelBySection) && !empty($excelPreviewData['headers']);
+            $useExcel = !empty($showExcelPreview) && !empty($excelBySection) && !empty($excelPreviewData['headers']);
         @endphp
 
         @if($useExcel)
