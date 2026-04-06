@@ -642,16 +642,61 @@ class DashboardController extends Controller
             });
         }
 
-        // If no in-session preview data exists, fallback to DB records and render them normally.
-        // Do not convert saved records into preview mode for the class records page.
+        // If no in-session preview data exists, fallback to DB records and render them using the same preview-style layout
         $excelTotalRows = 0;
         if (!empty($excelBySection)) {
             $excelTotalRows = collect($excelBySection)->map(fn($rows) => is_array($rows) ? count($rows) : 0)->sum();
         }
 
-        $showExcelPreview = false;
-        if (!empty($excelPreviewData) && !empty($excelPreviewData['headers']) && empty($recordsBySection)) {
-            $showExcelPreview = true;
+        if (empty($excelBySection) && $records->isNotEmpty()) {
+            $scoreKeys = collect();
+            foreach ($records as $record) {
+                $scores = $record->scores;
+                if (is_string($scores)) {
+                    $scores = json_decode($scores, true);
+                }
+                if (!is_array($scores)) {
+                    continue;
+                }
+
+                foreach ($scores as $key => $value) {
+                    if (!$scoreKeys->contains($key)) {
+                        $scoreKeys->push($key);
+                    }
+                }
+            }
+
+            if ($scoreKeys->isNotEmpty()) {
+                $excelPreviewData = [
+                    'headers' => $scoreKeys->toArray(),
+                    'rows' => [],
+                ];
+
+                $rows = [];
+                foreach ($records as $record) {
+                    $scores = $record->scores;
+                    if (is_string($scores)) {
+                        $scores = json_decode($scores, true);
+                    }
+                    if (!is_array($scores)) {
+                        continue;
+                    }
+
+                    $row = [];
+                    foreach ($scoreKeys as $key) {
+                        $row[] = isset($scores[$key]) ? $scores[$key] : '';
+                    }
+
+                    $rows[] = [
+                        'section' => trim((string)$record->section) === '' ? 'Unassigned' : trim((string)$record->section),
+                        'row' => $row,
+                    ];
+                }
+
+                $excelBySection = collect($rows)->groupBy('section')->map(function ($sectionRows) {
+                    return $sectionRows->pluck('row')->all();
+                });
+            }
         }
 
         $displayTotalRecords = $excelTotalRows > 0 ? $excelTotalRows : $records->count();
@@ -662,7 +707,6 @@ class DashboardController extends Controller
             'totalRecords' => $displayTotalRecords,
             'excelPreviewData' => $excelPreviewData,
             'excelBySection' => $excelBySection,
-            'showExcelPreview' => $showExcelPreview,
         ]);
     }
 

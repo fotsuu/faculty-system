@@ -47,7 +47,7 @@
         </div>
 
         @php
-            $useExcel = !empty($showExcelPreview) && !empty($excelBySection) && !empty($excelPreviewData['headers']);
+            $useExcel = !empty($excelBySection) && !empty($excelPreviewData['headers']);
         @endphp
 
         @if($useExcel)
@@ -55,19 +55,19 @@
                 <div style="margin-bottom: 24px;">
                     <h4 style="font-size: 16px; font-weight: 700; color: #1e3c72; margin-bottom: 12px;">Section: {{ $section }}</h4>
                     <div style="overflow-x: auto;">
-                        <table class="excelRecordsTable" style="width: 100%; border-collapse: collapse; font-size: 14px;">
+                        <table class="excelRecordsTable" style="width: max-content; min-width: 100%; border-collapse: collapse; font-size: 14px; table-layout: auto;">
                             <thead>
                                 <tr style="background: #f8fafc; border-bottom: 2px solid #edf2f7;">
                                     @foreach($excelPreviewData['headers'] as $header)
-                                        <th style="padding: 16px; text-align: left; font-weight: 700; color: #1e3c72;">{{ $header }}</th>
+                                        <th style="padding: 16px; text-align: left; font-weight: 700; color: #1e3c72; white-space: nowrap;">{{ $header }}</th>
                                     @endforeach
                                 </tr>
                             </thead>
                             <tbody>
                                 @foreach($sectionRows as $row)
                                     <tr style="border-bottom: 1px solid #edf2f7; transition: all 0.2s ease;" onmouseover="this.style.backgroundColor='#f1f5f9'" onmouseout="this.style.backgroundColor='transparent'">
-                                        @foreach($row as $idx => $cell)
-                                            <td style="padding: 14px 16px; color: #334155;">{{ $cell }}</td>
+                                        @foreach(range(0, count($excelPreviewData['headers']) - 1) as $idx)
+                                            <td style="padding: 14px 16px; color: #334155; white-space: nowrap;">{{ $row[$idx] ?? '' }}</td>
                                         @endforeach
                                     </tr>
                                 @endforeach
@@ -81,14 +81,14 @@
                 <div style="margin-bottom: 24px;">
                     <h4 style="font-size: 16px; font-weight: 700; color: #1e3c72; margin-bottom: 12px;">Section: {{ $section }}</h4>
                     <div style="overflow-x: auto;">
-                        <table class="recordsTable" style="width: 100%; border-collapse: collapse; font-size: 14px;">
+                        <table class="recordsTable" style="width: max-content; min-width: 100%; border-collapse: collapse; font-size: 14px; table-layout: auto;">
                             <thead>
                                 <tr style="background: #f8fafc; border-bottom: 2px solid #edf2f7;">
-                                    <th style="padding: 16px; text-align: left; font-weight: 700; color: #1e3c72;">Student Name</th>
-                                    <th style="padding: 16px; text-align: left; font-weight: 700; color: #1e3c72;">Subject Code</th>
-                                    <th style="padding: 16px; text-align: left; font-weight: 700; color: #1e3c72;">Subject Name</th>
-                                    <th style="padding: 16px; text-align: center; font-weight: 700; color: #1e3c72;">Grade</th>
-                                    <th style="padding: 16px; text-align: center; font-weight: 700; color: #1e3c72;">Status</th>
+                                    <th style="padding: 16px; text-align: left; font-weight: 700; color: #1e3c72; white-space: nowrap;">Student Name</th>
+                                    <th style="padding: 16px; text-align: left; font-weight: 700; color: #1e3c72; white-space: nowrap;">Subject Code</th>
+                                    <th style="padding: 16px; text-align: left; font-weight: 700; color: #1e3c72; white-space: nowrap;">Subject Name</th>
+                                    <th style="padding: 16px; text-align: center; font-weight: 700; color: #1e3c72; white-space: nowrap;">Grade</th>
+                                    <th style="padding: 16px; text-align: center; font-weight: 700; color: #1e3c72; white-space: nowrap;">Status</th>
                                 </tr>
                             </thead>
                             <tbody>
