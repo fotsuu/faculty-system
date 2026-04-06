@@ -1421,7 +1421,12 @@ class DashboardController extends Controller
                     \Log::info('Preview data imported during analytics generation', ['user_id' => $user->id, 'rows' => $rowCount]);
                 }
             } catch (\Exception $e) {
-                \Log::error('Error importing preview data: ' . $e->getMessage());
+                \Log::error('Error importing preview data: ' . $e->getMessage(), [
+                    'user_id' => $user->id,
+                    'trace' => $e->getTraceAsString()
+                ]);
+                // Return error to user instead of silently failing
+                return redirect()->route('dashboard')->with('error', 'Import failed: ' . $e->getMessage());
             }
         }
 

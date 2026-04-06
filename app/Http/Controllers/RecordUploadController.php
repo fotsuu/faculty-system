@@ -20,14 +20,36 @@ class RecordUploadController extends Controller
         $file = $request->file('file');
         $user = Auth::user();
         $name = time() . '_' . preg_replace('/[^A-Za-z0-9_\-.]/', '_', $file->getClientOriginalName());
-        $path = $file->storeAs('uploads', $name);
+        
+        try {
+            // Ensure uploads directory exists
+            $uploadDir = storage_path('app/uploads');
+            if (!is_dir($uploadDir)) {
+                mkdir($uploadDir, 0755, true);
+            }
+            
+            $path = $file->storeAs('uploads', $name);
+            if (!$path) {
+                throw new \Exception('Failed to store file. Check storage/app/uploads directory permissions.');
+            }
 
-        // Parse file to build preview (do not import yet)
-        $previewData = $this->parseAndExtractPreview($file, $user, $name, $path);
-        // save preview (and metadata) in session for later import when analytics generated
-        session([ 'excel_preview_data' => $previewData ]);
+            // Parse file to build preview (do not import yet)
+            $previewData = $this->parseAndExtractPreview($file, $user, $name, $path);
+            // save preview (and metadata) in session for later import when analytics generated
+            session([ 'excel_preview_data' => $previewData ]);
 
-        return redirect()->route('dashboard')->with('status', 'File uploaded successfully: ' . $name);
+            \Log::info('File uploaded successfully', [
+                'user_id' => $user->id,
+                'filename' => $name,
+                'path' => $path,
+                'preview_rows' => count($previewData['rows'] ?? [])
+            ]);
+
+            return redirect()->route('dashboard')->with('status', 'File uploaded successfully: ' . $name);
+        } catch (\Exception $e) {
+            \Log::error('File upload error: ' . $e->getMessage(), ['file' => $name]);
+            return redirect()->route('dashboard')->with('error', 'Upload failed: ' . $e->getMessage());
+        }
     }
 
     private function parseAndExtractPreview($file, $user, $fileName, $filePath)
