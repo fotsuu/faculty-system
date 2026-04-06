@@ -416,6 +416,21 @@
                     @enderror
                 </div>
                 
+                <!-- Department (Optional) -->
+                <div class="form-group">
+                    <label for="department">Department (Optional)</label>
+                    <input 
+                        type="text" 
+                        id="department" 
+                        name="department" 
+                        placeholder="e.g., IT, Engineering, Science"
+                        value="{{ old('department') }}"
+                    >
+                    @error('department')
+                        <div class="error-message">{{ $message }}</div>
+                    @enderror
+                </div>
+                
                 <!-- Password -->
                 <div class="form-group">
                     <label for="password">Password</label>

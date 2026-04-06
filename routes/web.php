@@ -44,6 +44,7 @@ Route::post('/register', function (Request $request) {
         'last_name' => ['required','string','max:255'],
         'email' => ['required','email','max:255','unique:users,email'],
         'password' => ['required','confirmed','min:8'],
+        'department' => ['nullable','string','max:255'],
     ]);
 
     $user = User::create([
@@ -51,6 +52,8 @@ Route::post('/register', function (Request $request) {
         'email' => $data['email'],
         'password' => Hash::make($data['password']),
         'role' => $data['role'],
+        'department' => $data['department'] ?? 'General Studies',
+        'status' => 'active',
     ]);
 
     Auth::login($user);
