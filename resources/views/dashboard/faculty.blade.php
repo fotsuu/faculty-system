@@ -113,35 +113,26 @@
                     <h3 class="section-title">Analytics Filters</h3>
                     <div style="font-size: 12px; color: #64748b;">Overall analytics, or filter by subject/section</div>
                 </div>
-                <form method="GET" style="display:flex; gap: 10px; align-items:flex-end; flex-wrap: wrap;">
+                <form method="GET" style="display:flex; gap: 10px; align-items:flex-end; flex-wrap: wrap;" id="analyticsFilterForm">
+                    <input type="hidden" name="subject_id" id="filterSubjectId" value="{{ $selectedSubjectId ?? '' }}">
+                    <input type="hidden" name="section" id="filterSection" value="{{ $selectedSection ?? '' }}">
                     <div>
-                        <label style="display:block; font-size:12px; font-weight:700; color:#64748b; margin-bottom:6px;">Subject</label>
-                        <select name="subject_id" style="min-width: 240px; padding:10px; border:1px solid #e2e8f0; border-radius:8px; font-size:13px;">
-                            <option value="">All Subjects</option>
-                            @foreach(($filterSubjects ?? []) as $s)
-                                <option value="{{ $s->id }}" {{ (string)($selectedSubjectId ?? '') === (string)$s->id ? 'selected' : '' }}>
-                                    {{ $s->code }} - {{ $s->name }}
+                        <label style="display:block; font-size:12px; font-weight:700; color:#64748b; margin-bottom:6px;">Subject / Section</label>
+                        @php
+                            $selectedKey = '';
+                            if (!empty($selectedSubjectId) && !empty($selectedSection)) {
+                                $selectedKey = $selectedSubjectId . '||' . $selectedSection;
+                            }
+                        @endphp
+                        <select id="subjectSectionSelect" style="min-width: 320px; padding:10px; border:1px solid #e2e8f0; border-radius:8px; font-size:13px;">
+                            <option value="">All Subjects (Overall)</option>
+                            @foreach(($subjectSectionOptions ?? []) as $opt)
+                                <option value="{{ $opt['value'] }}" {{ $selectedKey === $opt['value'] ? 'selected' : '' }}>
+                                    {{ $opt['label'] }}
                                 </option>
                             @endforeach
                         </select>
                     </div>
-                    <div>
-                        <label style="display:block; font-size:12px; font-weight:700; color:#64748b; margin-bottom:6px;">Section</label>
-                        <select name="section" style="min-width: 200px; padding:10px; border:1px solid #e2e8f0; border-radius:8px; font-size:13px;">
-                            <option value="">All Sections</option>
-                            @foreach(($filterSections ?? []) as $sec)
-                                <option value="{{ $sec }}" {{ (string)($selectedSection ?? '') === (string)$sec ? 'selected' : '' }}>
-                                    {{ $sec }}
-                                </option>
-                            @endforeach
-                        </select>
-                    </div>
-                    <button type="submit" style="background:#1e3c72; color:white; border:none; padding:10px 16px; border-radius:8px; font-weight:700; font-size:13px; cursor:pointer;">
-                        Apply
-                    </button>
-                    <a href="{{ url()->current() }}" style="padding:10px 14px; border-radius:8px; background:#f1f5f9; color:#1e3c72; text-decoration:none; font-weight:700; font-size:13px;">
-                        Reset
-                    </a>
                 </form>
             </div>
         </div>
@@ -400,6 +391,25 @@
 @section('scripts')
     <script>
         document.addEventListener('DOMContentLoaded', function() {
+            const filterForm = document.getElementById('analyticsFilterForm');
+            const subjectSectionSelect = document.getElementById('subjectSectionSelect');
+            const filterSubjectId = document.getElementById('filterSubjectId');
+            const filterSection = document.getElementById('filterSection');
+            if (filterForm && subjectSectionSelect && filterSubjectId && filterSection) {
+                subjectSectionSelect.addEventListener('change', function() {
+                    const selected = subjectSectionSelect.value || '';
+                    if (!selected.includes('||')) {
+                        filterSubjectId.value = '';
+                        filterSection.value = '';
+                    } else {
+                        const [sid, sec] = selected.split('||');
+                        filterSubjectId.value = sid || '';
+                        filterSection.value = sec || '';
+                    }
+                    filterForm.submit();
+                });
+            }
+
             // Pass/Fail Rate Chart
             const passFailCtx = document.getElementById('passFailChart');
             if (passFailCtx) {
@@ -482,27 +492,28 @@
                 });
             }
 
-            // Attendance Trends Chart (per semester, per subject)
+            // Attendance Trends Chart (per week + semester, per subject)
             const attendanceCtx = document.getElementById('attendanceChart');
             if (attendanceCtx) {
                 const attendanceRaw = {!! json_encode($attendanceTrends) !!};
                 const labels = Array.isArray(attendanceRaw) ? attendanceRaw.map((t, i) => t.code || t.name || 'Subject ' + (i + 1)) : [];
-                const data = Array.isArray(attendanceRaw) ? attendanceRaw.map((t) => Number(t.attendance_percent || 0)) : [];
-                const barColor = 'rgba(34, 100, 178, 0.85)';
+                const week1 = Array.isArray(attendanceRaw) ? attendanceRaw.map((t) => Number(t.week1 || 0)) : [];
+                const week2 = Array.isArray(attendanceRaw) ? attendanceRaw.map((t) => Number(t.week2 || 0)) : [];
+                const week3 = Array.isArray(attendanceRaw) ? attendanceRaw.map((t) => Number(t.week3 || 0)) : [];
+                const week4 = Array.isArray(attendanceRaw) ? attendanceRaw.map((t) => Number(t.week4 || 0)) : [];
+                const semester = Array.isArray(attendanceRaw) ? attendanceRaw.map((t) => Number(t.attendance_percent || t.average || 0)) : [];
 
                 new Chart(attendanceCtx, {
                     type: 'bar',
                     data: {
                         labels: labels,
-                        datasets: [{
-                            label: 'Attendance % (Semester)',
-                            data: data,
-                            backgroundColor: labels.map(() => barColor),
-                            borderColor: 'rgba(30, 60, 140, 1)',
-                            borderWidth: 1,
-                            borderRadius: 6,
-                            maxBarThickness: 60
-                        }]
+                        datasets: [
+                            { label: 'Week 1', data: week1, backgroundColor: 'rgba(147, 197, 253, 0.85)', borderColor: 'rgba(96, 165, 250, 1)', borderWidth: 1, borderRadius: 4 },
+                            { label: 'Week 2', data: week2, backgroundColor: 'rgba(96, 165, 250, 0.85)', borderColor: 'rgba(59, 130, 246, 1)', borderWidth: 1, borderRadius: 4 },
+                            { label: 'Week 3', data: week3, backgroundColor: 'rgba(59, 130, 246, 0.85)', borderColor: 'rgba(37, 99, 235, 1)', borderWidth: 1, borderRadius: 4 },
+                            { label: 'Week 4', data: week4, backgroundColor: 'rgba(37, 99, 235, 0.85)', borderColor: 'rgba(29, 78, 216, 1)', borderWidth: 1, borderRadius: 4 },
+                            { label: 'Semester %', data: semester, backgroundColor: 'rgba(16, 185, 129, 0.75)', borderColor: 'rgba(5, 150, 105, 1)', borderWidth: 1, borderRadius: 4 }
+                        ]
                     },
                     options: {
                         responsive: true,

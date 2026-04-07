@@ -128,6 +128,46 @@
             </div>
         </div>
     </div>
+
+    <!-- Create/Edit Subject Modal -->
+    <div id="subjectModal" class="modal-overlay" style="display:none; position:fixed; inset:0; background:rgba(15, 23, 42, 0.6); z-index:10000; align-items:center; justify-content:center; backdrop-filter: blur(4px);">
+        <div style="background:white; border-radius:12px; width:95%; max-width:560px; padding:24px; box-shadow:0 20px 25px -5px rgba(0,0,0,.1);">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+                <h3 id="modalTitle" style="margin:0; color:#1e3c72; font-size:20px; font-weight:700;">Add Subject</h3>
+                <button type="button" onclick="closeSubjectModal()" style="background:none; border:none; font-size:22px; color:#64748b; cursor:pointer;">&times;</button>
+            </div>
+
+            <form id="subjectForm" method="POST" action="{{ route('faculty.subjects.store') }}">
+                @csrf
+                <span id="methodField"></span>
+
+                <div style="margin-bottom:12px;">
+                    <label for="subjectCode" style="display:block; font-size:13px; font-weight:600; color:#334155; margin-bottom:6px;">Subject Code</label>
+                    <input id="subjectCode" name="code" type="text" required style="width:100%; padding:10px 12px; border:1px solid #e2e8f0; border-radius:8px; font-size:13px;">
+                </div>
+
+                <div style="margin-bottom:12px;">
+                    <label for="subjectName" style="display:block; font-size:13px; font-weight:600; color:#334155; margin-bottom:6px;">Subject Name</label>
+                    <input id="subjectName" name="name" type="text" required style="width:100%; padding:10px 12px; border:1px solid #e2e8f0; border-radius:8px; font-size:13px;">
+                </div>
+
+                <div style="margin-bottom:12px;">
+                    <label for="subjectDescription" style="display:block; font-size:13px; font-weight:600; color:#334155; margin-bottom:6px;">Description</label>
+                    <textarea id="subjectDescription" name="description" rows="3" style="width:100%; padding:10px 12px; border:1px solid #e2e8f0; border-radius:8px; font-size:13px; resize:vertical;"></textarea>
+                </div>
+
+                <div style="margin-bottom:16px;">
+                    <label style="display:block; font-size:13px; font-weight:600; color:#334155; margin-bottom:6px;">Sections</label>
+                    <div id="sectionsCheckboxContainer" style="max-height:180px; overflow:auto; border:1px solid #e2e8f0; border-radius:8px; padding:10px 12px;"></div>
+                </div>
+
+                <div style="display:flex; justify-content:flex-end; gap:10px;">
+                    <button type="button" onclick="closeSubjectModal()" style="padding:10px 14px; border:1px solid #cbd5e1; background:white; color:#334155; border-radius:8px; font-weight:600; cursor:pointer;">Cancel</button>
+                    <button type="submit" style="padding:10px 16px; border:none; background:#1e3c72; color:white; border-radius:8px; font-weight:600; cursor:pointer;">Save</button>
+                </div>
+            </form>
+        </div>
+    </div>
 @endsection
 
 @section('scripts')

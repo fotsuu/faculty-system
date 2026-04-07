@@ -332,7 +332,7 @@
         
         <!-- Right Section -->
         <div class="right-section">
-            <h2>Register</h2>
+            <h2>Faculty Registration</h2>
             
             @if ($errors->any())
                 <div class="error-message" style="display: block; margin-bottom: 20px; padding: 12px 16px; background-color: #f8d7da; border: 1px solid #f5c6cb; border-radius: 4px; color: #721c24;">
@@ -350,20 +350,6 @@
             
             <form method="POST" action="{{ route('register.post') }}">
                 @csrf
-                
-                <!-- Role Selection -->
-                <div class="form-group">
-                    <label for="role">Role</label>
-                    <select id="role" name="role" required>
-                        <option value="">Select your role</option>
-                        <option value="faculty" {{ old('role') === 'faculty' ? 'selected' : '' }}>Faculty</option>
-                        <option value="program_head" {{ old('role') === 'program_head' ? 'selected' : '' }}>Program Head</option>
-                        <option value="dean" {{ old('role') === 'dean' ? 'selected' : '' }}>Dean (Admin)</option>
-                    </select>
-                    @error('role')
-                        <div class="error-message">{{ $message }}</div>
-                    @enderror
-                </div>
                 
                 <!-- First & Last Name -->
                 <div class="form-row">
@@ -414,17 +400,15 @@
                     @enderror
                 </div>
                 
-                <!-- Department (Optional) -->
+                <!-- Program -->
                 <div class="form-group">
-                    <label for="department">Department (Optional)</label>
-                    <input 
-                        type="text" 
-                        id="department" 
-                        name="department" 
-                        placeholder="e.g., IT, Engineering, Science"
-                        value="{{ old('department') }}"
-                    >
-                    @error('department')
+                    <label for="program">Program</label>
+                    <select id="program" name="program" required>
+                        <option value="">Select program</option>
+                        <option value="BSIT" {{ old('program') === 'BSIT' ? 'selected' : '' }}>BSIT</option>
+                        <option value="BSIS" {{ old('program') === 'BSIS' ? 'selected' : '' }}>BSIS</option>
+                    </select>
+                    @error('program')
                         <div class="error-message">{{ $message }}</div>
                     @enderror
                 </div>

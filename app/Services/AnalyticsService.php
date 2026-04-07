@@ -315,37 +315,40 @@ class AnalyticsService
         $subjects = $this->applySubjectListFilters($subjects)->get();
 
         return $subjects->map(function ($subject) {
-            // If section filter is active, StudentAttendance has no section column;
-            // compute from legacy Record.scores to keep section-scoping consistent.
-            $attendances = collect();
-            if ($this->section === null) {
+            // Primary source: parsed attendance columns from imported class records
+            // (captures P/A/L exactly as encoded in uploaded sheet).
+            $fromRecords = $this->computeAttendanceFromRecordScoresBySubject($subject->id);
+            $presentCount = $fromRecords['present'];
+            $lateCount = $fromRecords['late'];
+            $absentCount = $fromRecords['absent'];
+            $excusedCount = $fromRecords['excused'];
+            $totalPossible = $fromRecords['total'];
+
+            // Fallback source: normalized student_attendance table.
+            if ($totalPossible === 0) {
                 $attendanceQuery = StudentAttendance::where('subject_id', $subject->id);
                 $attendanceQuery = $this->applyUserFilter($attendanceQuery);
                 $attendanceQuery = $this->applySubjectFilter($attendanceQuery, 'subject_id');
                 $attendances = $attendanceQuery->get();
-            }
-
-            $presentCount = $attendances->where('status', 'present')->count();
-            $lateCount = $attendances->where('status', 'late')->count();
-            $absentCount = $attendances->where('status', 'absent')->count();
-            $excusedCount = $attendances->where('status', 'excused')->count();
-            $totalPossible = $attendances->count();
-
-            if ($totalPossible === 0) {
-                $fallback = $this->computeAttendanceFromRecordScoresBySubject($subject->id);
-                $presentCount = $fallback['present'];
-                $lateCount = $fallback['late'];
-                $absentCount = $fallback['absent'];
-                $excusedCount = $fallback['excused'];
-                $totalPossible = $fallback['total'];
+                $presentCount = $attendances->where('status', 'present')->count();
+                $lateCount = $attendances->where('status', 'late')->count();
+                $absentCount = $attendances->where('status', 'absent')->count();
+                $excusedCount = $attendances->where('status', 'excused')->count();
+                $totalPossible = $attendances->count();
             }
 
             $attendancePercent = $totalPossible > 0 ? round((($presentCount + $lateCount * 0.5) / $totalPossible) * 100, 1) : 0;
+            $weekly = $this->buildWeeklyAttendance($subject->id);
 
             return [
                 'code' => $subject->code,
                 'name' => $subject->name,
                 'attendance_percent' => $attendancePercent,
+                'week1' => $weekly['week1'],
+                'week2' => $weekly['week2'],
+                'week3' => $weekly['week3'],
+                'week4' => $weekly['week4'],
+                'average' => $weekly['average'],
                 'present' => $presentCount,
                 'late' => $lateCount,
                 'absent' => $absentCount,
@@ -353,6 +356,70 @@ class AnalyticsService
                 'total' => $totalPossible,
             ];
         })->toArray();
+    }
+
+    private function buildWeeklyAttendance($subjectId)
+    {
+        // Prefer legacy record parsing because it reflects raw uploaded attendance marks.
+        $legacy = $this->extractDetailedAttendance($subjectId);
+        $sessionAverages = collect($legacy['session_averages'] ?? []);
+        if ($sessionAverages->isNotEmpty()) {
+            $sessionCount = $sessionAverages->count();
+            $chunk = max(1, (int) ceil($sessionCount / 4));
+            $weeks = [];
+            for ($i = 0; $i < 4; $i++) {
+                $slice = $sessionAverages->slice($i * $chunk, $chunk);
+                $weeks[$i] = $slice->isNotEmpty() ? round($slice->avg(), 1) : 0;
+            }
+
+            return [
+                'week1' => $weeks[0],
+                'week2' => $weeks[1],
+                'week3' => $weeks[2],
+                'week4' => $weeks[3],
+                'average' => round((float) ($legacy['average'] ?? $sessionAverages->avg()), 1),
+            ];
+        }
+
+        $query = StudentAttendance::where('subject_id', $subjectId);
+        $query = $this->applyUserFilter($query);
+        $query = $this->applySubjectFilter($query, 'subject_id');
+        $rows = $query
+            ->orderBy('session_date')
+            ->orderBy('session_number')
+            ->get();
+
+        if ($rows->isEmpty()) {
+            return ['week1' => 0, 'week2' => 0, 'week3' => 0, 'week4' => 0, 'average' => 0];
+        }
+
+        $perSession = $rows->groupBy('session_number')
+            ->map(function ($sessionRows) {
+                $total = $sessionRows->count();
+                if ($total === 0) {
+                    return 0;
+                }
+                $present = $sessionRows->where('status', 'present')->count();
+                $late = $sessionRows->where('status', 'late')->count();
+                return (($present + ($late * 0.5)) / $total) * 100;
+            })
+            ->values();
+
+        $sessionCount = $perSession->count();
+        $chunk = max(1, (int) ceil($sessionCount / 4));
+        $weeks = [];
+        for ($i = 0; $i < 4; $i++) {
+            $slice = $perSession->slice($i * $chunk, $chunk);
+            $weeks[$i] = $slice->isNotEmpty() ? round($slice->avg(), 1) : 0;
+        }
+
+        return [
+            'week1' => $weeks[0],
+            'week2' => $weeks[1],
+            'week3' => $weeks[2],
+            'week4' => $weeks[3],
+            'average' => round($perSession->avg(), 1),
+        ];
     }
 
     private function computeAttendanceFromRecordScoresBySubject($subjectId)
@@ -374,6 +441,12 @@ class AnalyticsService
 
             foreach ($scores as $column => $value) {
                 if (!$this->isAttendanceColumn($column)) {
+                    continue;
+                }
+
+                $raw = trim((string) $value);
+                if ($raw === '' || $raw === '-' || strtolower($raw) === 'n/a' || strtolower($raw) === 'na') {
+                    // Skip empty attendance cells to avoid counting non-held sessions as absences.
                     continue;
                 }
 
@@ -410,11 +483,18 @@ class AnalyticsService
     {
         $lower = trim(strtolower((string)$column));
 
+        if (preg_match('/\b(total|overall|summary|remark|remarks|quiz|eqv|midterm|final|exam|project|activity)\b/i', $lower)) {
+            return false;
+        }
+        if (preg_match('/^q\s*\d+$/i', $lower) || preg_match('/^e\d+$/i', $lower) || preg_match('/^l\d+$/i', $lower)) {
+            return false;
+        }
+
         if (preg_match('/\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}/', $lower) || preg_match('/^[a-z]{3}[-\s]\d{1,2}/', $lower)) {
             return true;
         }
 
-        if (preg_match('/^(a|att|attendance|day|week|session|l|a)\s*\d+$/i', $column) || preg_match('/^[la]\d+$/i', $column)) {
+        if (preg_match('/^(a|att|attendance|day|week|session)\s*\d+$/i', $column) || preg_match('/^a\d+$/i', $column) || preg_match('/^\d+$/', $lower)) {
             return true;
         }
 
@@ -422,7 +502,7 @@ class AnalyticsService
             return true;
         }
 
-        if (preg_match('/attendance|present|absent|roll|mark/i', $column) && !preg_match('/total|equivalent|grade/i', $column)) {
+        if (preg_match('/\b(attendance|roll|mark)\b/i', $column) && !preg_match('/total|equivalent|grade/i', $column)) {
             return true;
         }
 
@@ -459,7 +539,8 @@ class AnalyticsService
 
     private function extractDetailedAttendance($subjectId)
     {
-        $records = Record::where('subject_id', $subjectId)->get();
+        $records = Record::where('subject_id', $subjectId);
+        $records = $this->applyRecordFilters($records)->get();
         $sessionData = []; // Group by column name
         $allColumns = [];
         
@@ -470,6 +551,13 @@ class AnalyticsService
             foreach ($scores as $column => $value) {
                 $lower = strtolower(trim($column));
                 $allColumns[$column] = true;
+
+                if (preg_match('/\b(total|overall|summary|remark|remarks|quiz|eqv|midterm|final|exam|project|activity)\b/i', $lower)) {
+                    continue;
+                }
+                if (preg_match('/^q\s*\d+$/i', $lower) || preg_match('/^e\d+$/i', $lower) || preg_match('/^l\d+$/i', $lower)) {
+                    continue;
+                }
                 
                 // Detect attendance columns: dates, attendance marks (L/A), or session numbers
                 $isAttendanceColumn = false;
@@ -481,7 +569,7 @@ class AnalyticsService
                 }
                 
                 // Pattern 2: session markers (A1, A2, Att1, Day 1, Week1, Session1, L1/L2)
-                if (preg_match('/^(a|att|attendance|day|week|session|l|a)\s*\d+$/i', $column) || preg_match('/^[la]\d+$/i', $column)) {
+                if (preg_match('/^(a|att|attendance|day|week|session)\s*\d+$/i', $column) || preg_match('/^a\d+$/i', $column) || preg_match('/^\d+$/', $lower)) {
                     $isAttendanceColumn = true;
                 }
 
@@ -491,11 +579,16 @@ class AnalyticsService
                 }
                 
                 // Pattern 4: Explicit Attendance/Presence/Roll columns
-                if (preg_match('/attendance|present|absent|roll|mark/i', $column) && !preg_match('/total|equivalent|grade/i', $column)) {
+                if (preg_match('/\b(attendance|roll|mark)\b/i', $column) && !preg_match('/total|equivalent|grade/i', $column)) {
                     $isAttendanceColumn = true;
                 }
                 
                 if ($isAttendanceColumn) {
+                    $raw = trim((string) $value);
+                    if ($raw === '' || $raw === '-' || strtolower($raw) === 'n/a' || strtolower($raw) === 'na') {
+                        continue;
+                    }
+
                     if (!isset($sessionData[$column])) {
                         $sessionData[$column] = ['present' => 0, 'late' => 0, 'absent' => 0, 'excused' => 0, 'total' => 0];
                     }
@@ -604,8 +697,8 @@ class AnalyticsService
             return 'absent';
         }
 
-        // Unknown but not empty: assume present to be consistent with previous logic.
-        return 'present';
+        // Unknown symbols should not inflate attendance percentages.
+        return 'absent';
     }
 
     /**

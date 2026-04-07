@@ -332,20 +332,6 @@
             <form method="POST" action="{{ route('login.post') }}">
                 @csrf
                 
-                <!-- Role Selection -->
-                <div class="form-group">
-                    <label for="role">Role</label>
-                    <select id="role" name="role" required>
-                        <option value="">Select your role</option>
-                        <option value="faculty" {{ old('role') === 'faculty' ? 'selected' : '' }}>Faculty</option>
-                        <option value="program_head" {{ old('role') === 'program_head' ? 'selected' : '' }}>Program Head</option>
-                        <option value="dean" {{ old('role') === 'dean' ? 'selected' : '' }}>Dean (Admin)</option>
-                    </select>
-                    @error('role')
-                        <div class="error-message">{{ $message }}</div>
-                    @enderror
-                </div>
-                
                 <!-- Email Address -->
                 <div class="form-group">
                     <label for="email">Email</label>

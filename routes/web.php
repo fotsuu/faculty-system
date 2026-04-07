@@ -39,20 +39,19 @@ Route::get('/register', function () {
 
 Route::post('/register', function (Request $request) {
     $data = $request->validate([
-        'role' => ['required','in:faculty,program_head,dean'],
         'first_name' => ['required','string','max:255'],
         'last_name' => ['required','string','max:255'],
         'email' => ['required','email','max:255','unique:users,email'],
         'password' => ['required','confirmed','min:8'],
-        'department' => ['nullable','string','max:255'],
+        'program' => ['required','in:BSIT,BSIS'],
     ]);
 
     $user = User::create([
         'name' => $data['first_name'].' '.$data['last_name'],
         'email' => $data['email'],
         'password' => Hash::make($data['password']),
-        'role' => $data['role'],
-        'department' => $data['department'] ?? 'General Studies',
+        'role' => 'faculty',
+        'department' => $data['program'],
         'status' => 'active',
     ]);
 

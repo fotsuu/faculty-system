@@ -176,6 +176,37 @@ class DashboardController extends Controller
             ->sort()
             ->values();
 
+        // Single-dropdown options (Subject + Section) for simpler analytics filtering.
+        $subjectSectionOptions = collect();
+        foreach ($filterSubjects as $subjectOption) {
+            $subjectSections = Record::where('user_id', $user->id)
+                ->whereNotNull('file_name')
+                ->where('subject_id', $subjectOption->id)
+                ->select('section')
+                ->distinct()
+                ->pluck('section')
+                ->map(function ($s) {
+                    $s = is_string($s) ? trim($s) : '';
+                    return $s === '' ? 'Unassigned' : $s;
+                })
+                ->unique()
+                ->sort()
+                ->values();
+
+            if ($subjectSections->isEmpty()) {
+                $subjectSections = collect(['Unassigned']);
+            }
+
+            foreach ($subjectSections as $sec) {
+                $subjectSectionOptions->push([
+                    'value' => $subjectOption->id . '||' . $sec,
+                    'subject_id' => $subjectOption->id,
+                    'section' => $sec,
+                    'label' => $subjectOption->code . ' - ' . $sec,
+                ]);
+            }
+        }
+
         return view('dashboard.faculty', [
             'totalRecords' => $totalRecords,
             'totalStudents' => $totalStudents,
@@ -195,6 +226,7 @@ class DashboardController extends Controller
             'filterSections' => $filterSections,
             'selectedSubjectId' => $selectedSubjectId,
             'selectedSection' => $selectedSection,
+            'subjectSectionOptions' => $subjectSectionOptions,
         ]);
     }
 
@@ -236,17 +268,32 @@ class DashboardController extends Controller
             'analytics' => ['passFailRates' => [], 'gradeDistribution' => [], 'attendanceTrends' => []],
             'totalPass' => 0,
             'totalFail' => 0,
+            'filterSubjects' => collect(),
+            'filterSections' => collect(),
+            'subjectSectionOptions' => collect(),
+            'selectedSubjectId' => $selectedSubjectId,
+            'selectedSection' => $selectedSection,
         ];
 
         if ($facultyIds->isEmpty()) {
             return view('dashboard.program-head', $emptyPayload);
         }
 
+        // Faculty scope that has uploaded class records.
+        $analyticsFacultyIds = Record::whereIn('user_id', $facultyIds)
+            ->whereNotNull('file_name')
+            ->distinct()
+            ->pluck('user_id');
+        if ($analyticsFacultyIds->isEmpty()) {
+            $analyticsFacultyIds = $facultyIds;
+        }
+
         $now = now();
         $currentStart = $now->copy()->subDays(30);
         $previousStart = $now->copy()->subDays(60);
 
-        $recordsBase = Record::whereIn('user_id', $facultyIds);
+        $recordsBase = Record::whereIn('user_id', $analyticsFacultyIds)
+            ->whereNotNull('file_name');
         $totalRecords = (clone $recordsBase)->count();
         $recordsCurrent = (clone $recordsBase)->where('created_at', '>=', $currentStart)->count();
         $recordsPrevious = (clone $recordsBase)->where('created_at', '>=', $previousStart)->where('created_at', '<', $currentStart)->count();
@@ -255,7 +302,7 @@ class DashboardController extends Controller
         $totalFaculty = $facultyIds->count();
         
         // Use AnalyticsService for accurate analytics (scoped by optional subject/section)
-        $analyticsService = (new \App\Services\AnalyticsService($facultyIds->toArray()))
+        $analyticsService = (new \App\Services\AnalyticsService($analyticsFacultyIds->toArray()))
             ->setFilters($selectedSubjectId, $selectedSection);
         $analytics = $analyticsService->generateAnalytics();
         
@@ -263,7 +310,8 @@ class DashboardController extends Controller
         $gradeDistribution = $analytics['gradeDistribution'];
         $attendanceTrends = $analytics['attendanceTrends'];
         
-        $allRecords = Record::whereIn('user_id', $facultyIds)
+        $allRecords = Record::whereIn('user_id', $analyticsFacultyIds)
+            ->whereNotNull('file_name')
             ->when($selectedSubjectId, fn ($q) => $q->where('subject_id', $selectedSubjectId))
             ->when(is_string($selectedSection) && $selectedSection !== '', function ($q) use ($selectedSection) {
                 if (strcasecmp($selectedSection, 'Unassigned') === 0) {
@@ -279,7 +327,7 @@ class DashboardController extends Controller
         $totalFail = collect($passFailRates)->sum('fail');
         $passRatePercent = collect($passFailRates)->isNotEmpty() ? (int) round(($totalPass / collect($passFailRates)->sum('total')) * 100) : 0;
 
-        $subjects = Subject::whereIn('user_id', $facultyIds)->where('status', 'active')->get()->map(function ($subject) use ($passFailRates, $attendanceTrends) {
+        $subjects = Subject::whereIn('user_id', $analyticsFacultyIds)->where('status', 'active')->get()->map(function ($subject) use ($passFailRates, $attendanceTrends) {
             $subjectRecords = Record::where('subject_id', $subject->id)->get();
             $studentCount = $subjectRecords->unique('student_id')->count();
             $recordCount = $subjectRecords->count();
@@ -296,7 +344,9 @@ class DashboardController extends Controller
             ];
         });
 
-        $submissions = Record::whereIn('user_id', $facultyIds)->with(['user', 'subject'])->orderByDesc('created_at')->get()
+        $submissions = Record::whereIn('user_id', $analyticsFacultyIds)
+            ->whereNotNull('file_name')
+            ->with(['user', 'subject'])->orderByDesc('created_at')->get()
             ->groupBy(fn ($r) => $r->user_id . '-' . $r->subject_id)->take(10)->map(fn ($group) => (object) [
                 'user_id' => $group->first()->user_id,
                 'subject_id' => $group->first()->subject_id,
@@ -308,9 +358,10 @@ class DashboardController extends Controller
                 'records' => $group->count(),
             ])->values();
 
-        $topStudents = Student::whereIn('id', Record::whereIn('user_id', $facultyIds)->distinct()->pluck('student_id'))->get()
-            ->map(function ($student) use ($facultyIds, $selectedSubjectId, $selectedSection) {
-                $records = Record::where('student_id', $student->id)->whereIn('user_id', $facultyIds)
+        $topStudents = Student::whereIn('id', Record::whereIn('user_id', $analyticsFacultyIds)->distinct()->pluck('student_id'))->get()
+            ->map(function ($student) use ($analyticsFacultyIds, $selectedSubjectId, $selectedSection) {
+                $records = Record::where('student_id', $student->id)->whereIn('user_id', $analyticsFacultyIds)
+                    ->whereNotNull('file_name')
                     ->when($selectedSubjectId, fn ($q) => $q->where('subject_id', $selectedSubjectId))
                     ->when(is_string($selectedSection) && $selectedSection !== '', function ($q) use ($selectedSection) {
                         if (strcasecmp($selectedSection, 'Unassigned') === 0) {
@@ -358,12 +409,13 @@ class DashboardController extends Controller
             ->orderBy('created_at', 'desc')
             ->get();
 
-        $filterSubjects = Subject::whereIn('user_id', $facultyIds)
+        $filterSubjects = Subject::whereIn('user_id', $analyticsFacultyIds)
             ->where('status', 'active')
             ->orderBy('code')
             ->get(['id', 'code', 'name']);
 
-        $sectionsQuery = Record::whereIn('user_id', $facultyIds);
+        $sectionsQuery = Record::whereIn('user_id', $analyticsFacultyIds)
+            ->whereNotNull('file_name');
         if ($selectedSubjectId) {
             $sectionsQuery->where('subject_id', $selectedSubjectId);
         }
@@ -378,6 +430,36 @@ class DashboardController extends Controller
             ->unique()
             ->sort()
             ->values();
+
+        $subjectSectionOptions = collect();
+        foreach ($filterSubjects as $subjectOption) {
+            $subjectSections = Record::whereIn('user_id', $analyticsFacultyIds)
+                ->whereNotNull('file_name')
+                ->where('subject_id', $subjectOption->id)
+                ->select('section')
+                ->distinct()
+                ->pluck('section')
+                ->map(function ($s) {
+                    $s = is_string($s) ? trim($s) : '';
+                    return $s === '' ? 'Unassigned' : $s;
+                })
+                ->unique()
+                ->sort()
+                ->values();
+
+            if ($subjectSections->isEmpty()) {
+                $subjectSections = collect(['Unassigned']);
+            }
+
+            foreach ($subjectSections as $sec) {
+                $subjectSectionOptions->push([
+                    'value' => $subjectOption->id . '||' . $sec,
+                    'subject_id' => $subjectOption->id,
+                    'section' => $sec,
+                    'label' => $subjectOption->code . ' - ' . $sec,
+                ]);
+            }
+        }
 
         return view('dashboard.program-head', [
             'totalFaculty' => $totalFaculty, 'pendingReviews' => 0, 'totalRecords' => $totalRecords,
@@ -396,6 +478,7 @@ class DashboardController extends Controller
             'filterSections' => $filterSections,
             'selectedSubjectId' => $selectedSubjectId,
             'selectedSection' => $selectedSection,
+            'subjectSectionOptions' => $subjectSectionOptions,
         ]);
     }
 

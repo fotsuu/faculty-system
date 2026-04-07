@@ -471,27 +471,28 @@
             });
         }
 
-        // Institutional Attendance Chart (per semester)
+        // Institutional Attendance Chart (per week + semester)
         const aEl = document.getElementById('attendanceChart');
         if (aEl) {
             const attendanceRaw = {!! json_encode($attendanceTrends) !!};
             const labels = Array.isArray(attendanceRaw) ? attendanceRaw.map((t, i) => t.code || t.name || 'Subject ' + (i + 1)) : [];
-            const data = Array.isArray(attendanceRaw) ? attendanceRaw.map((t) => Number(t.attendance_percent || 0)) : [];
-            const barColor = 'rgba(34, 100, 178, 0.85)';
+            const week1 = Array.isArray(attendanceRaw) ? attendanceRaw.map((t) => Number(t.week1 || 0)) : [];
+            const week2 = Array.isArray(attendanceRaw) ? attendanceRaw.map((t) => Number(t.week2 || 0)) : [];
+            const week3 = Array.isArray(attendanceRaw) ? attendanceRaw.map((t) => Number(t.week3 || 0)) : [];
+            const week4 = Array.isArray(attendanceRaw) ? attendanceRaw.map((t) => Number(t.week4 || 0)) : [];
+            const semester = Array.isArray(attendanceRaw) ? attendanceRaw.map((t) => Number(t.attendance_percent || t.average || 0)) : [];
 
             new Chart(aEl, {
                 type: 'bar',
                 data: {
                     labels: labels,
-                    datasets: [{
-                        label: 'Attendance % (Semester)',
-                        data: data,
-                        backgroundColor: labels.map(() => barColor),
-                        borderColor: 'rgba(30, 60, 140, 1)',
-                        borderWidth: 1,
-                        borderRadius: 6,
-                        maxBarThickness: 60
-                    }]
+                    datasets: [
+                        { label: 'Week 1', data: week1, backgroundColor: 'rgba(147, 197, 253, 0.85)', borderColor: 'rgba(96, 165, 250, 1)', borderWidth: 1, borderRadius: 4 },
+                        { label: 'Week 2', data: week2, backgroundColor: 'rgba(96, 165, 250, 0.85)', borderColor: 'rgba(59, 130, 246, 1)', borderWidth: 1, borderRadius: 4 },
+                        { label: 'Week 3', data: week3, backgroundColor: 'rgba(59, 130, 246, 0.85)', borderColor: 'rgba(37, 99, 235, 1)', borderWidth: 1, borderRadius: 4 },
+                        { label: 'Week 4', data: week4, backgroundColor: 'rgba(37, 99, 235, 0.85)', borderColor: 'rgba(29, 78, 216, 1)', borderWidth: 1, borderRadius: 4 },
+                        { label: 'Semester %', data: semester, backgroundColor: 'rgba(16, 185, 129, 0.75)', borderColor: 'rgba(5, 150, 105, 1)', borderWidth: 1, borderRadius: 4 }
+                    ]
                 },
                 options: {
                     responsive: true,

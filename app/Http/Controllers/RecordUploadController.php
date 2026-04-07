@@ -218,7 +218,8 @@ class RecordUploadController extends Controller
                 if ($sheetName !== '' && (
                     stripos($sheetName, 'class record') !== false ||
                     stripos($sheetName, 'classrecord') !== false ||
-                    stripos($sheetName, 'classrec') !== false
+                    stripos($sheetName, 'classrec') !== false ||
+                    stripos($sheetName, 'attendance') !== false
                 )) {
                     // Try with namespace first, then fallback
                     $rid = (string)$sheet->attributes($rNs)->id;
@@ -239,7 +240,8 @@ class RecordUploadController extends Controller
                         stripos($sheetName, 'record') !== false ||
                         stripos($sheetName, 'class') !== false ||
                         stripos($sheetName, 'classrec') !== false ||
-                        stripos($sheetName, 'classrecord') !== false
+                        stripos($sheetName, 'classrecord') !== false ||
+                        stripos($sheetName, 'attendance') !== false
                     )) {
                         $rid = (string)$sheet->attributes($rNs)->id;
                         if (!$rid) {
@@ -272,7 +274,7 @@ class RecordUploadController extends Controller
             }
             return array_values(array_unique($sheetPaths));
         } catch (\Exception $e) {
-            \Log::warning('Could not resolve class record sheet path: ' . $e->getMessage());
+            \Log::warning('Could not resolve class record/attendance sheet path: ' . $e->getMessage());
             return [];
         }
     }

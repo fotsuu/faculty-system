@@ -15,38 +15,50 @@
             <h3 class="section-title">Analytics Filters</h3>
             <div class="section-subtitle">View overall analytics, or filter by subject/section</div>
         </div>
-        <form method="GET" style="display:flex; gap: 10px; align-items:flex-end; flex-wrap: wrap;">
+        <form method="GET" style="display:flex; gap: 10px; align-items:flex-end; flex-wrap: wrap;" id="institutionalFilterForm">
+            <input type="hidden" name="subject_id" id="institutionalSubjectId" value="{{ $selectedSubjectId ?? '' }}">
+            <input type="hidden" name="section" id="institutionalSection" value="{{ $selectedSection ?? '' }}">
             <div>
-                <label style="display:block; font-size:12px; font-weight:700; color:#64748b; margin-bottom:6px;">Subject</label>
-                <select name="subject_id" style="min-width: 240px; padding:10px; border:1px solid #e2e8f0; border-radius:8px; font-size:13px;">
-                    <option value="">All Subjects</option>
-                    @foreach(($filterSubjects ?? []) as $s)
-                        <option value="{{ $s->id }}" {{ (string)$selectedSubjectId === (string)$s->id ? 'selected' : '' }}>
-                            {{ $s->code }} - {{ $s->name }}
+                <label style="display:block; font-size:12px; font-weight:700; color:#64748b; margin-bottom:6px;">Subject / Section</label>
+                @php
+                    $selectedKey = '';
+                    if (!empty($selectedSubjectId) && !empty($selectedSection)) {
+                        $selectedKey = $selectedSubjectId . '||' . $selectedSection;
+                    }
+                @endphp
+                <select id="institutionalSubjectSectionSelect" style="min-width: 320px; padding:10px; border:1px solid #e2e8f0; border-radius:8px; font-size:13px;">
+                    <option value="">All Subjects (Overall)</option>
+                    @foreach(($subjectSectionOptions ?? []) as $opt)
+                        <option value="{{ $opt['value'] }}" {{ $selectedKey === $opt['value'] ? 'selected' : '' }}>
+                            {{ $opt['label'] }}
                         </option>
                     @endforeach
                 </select>
             </div>
-            <div>
-                <label style="display:block; font-size:12px; font-weight:700; color:#64748b; margin-bottom:6px;">Section</label>
-                <select name="section" style="min-width: 200px; padding:10px; border:1px solid #e2e8f0; border-radius:8px; font-size:13px;">
-                    <option value="">All Sections</option>
-                    @foreach(($filterSections ?? []) as $sec)
-                        <option value="{{ $sec }}" {{ (string)$selectedSection === (string)$sec ? 'selected' : '' }}>
-                            {{ $sec }}
-                        </option>
-                    @endforeach
-                </select>
-            </div>
-            <button type="submit" style="background:#1e3c72; color:white; border:none; padding:10px 16px; border-radius:8px; font-weight:700; font-size:13px; cursor:pointer;">
-                Apply
-            </button>
-            <a href="{{ url()->current() }}" style="padding:10px 14px; border-radius:8px; background:#f1f5f9; color:#1e3c72; text-decoration:none; font-weight:700; font-size:13px;">
-                Reset
-            </a>
         </form>
     </div>
 </div>
+<script>
+    (function() {
+        const form = document.getElementById('institutionalFilterForm');
+        const select = document.getElementById('institutionalSubjectSectionSelect');
+        const sid = document.getElementById('institutionalSubjectId');
+        const sec = document.getElementById('institutionalSection');
+        if (!form || !select || !sid || !sec) return;
+        select.addEventListener('change', function() {
+            const selected = select.value || '';
+            if (!selected.includes('||')) {
+                sid.value = '';
+                sec.value = '';
+            } else {
+                const parts = selected.split('||');
+                sid.value = parts[0] || '';
+                sec.value = parts[1] || '';
+            }
+            form.submit();
+        });
+    })();
+</script>
 @endif
 
 <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 24px; margin-bottom: 25px;">

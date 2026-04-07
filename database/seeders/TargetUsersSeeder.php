@@ -13,34 +13,34 @@ class TargetUsersSeeder extends Seeder
      */
     public function run(): void
     {
-        // Default credentials for auto-detected accounts:
-        // nel@dssc.edu.ph       | password123
-        // rhea@dssc.edu.ph      | password123
-        // felomino@dssc.edu.ph  | password123
+        // Default credentials:
+        // nel.panaligan@dssc.edu.ph   | nel12345
+        // rhea.perito@dssc.edu.ph     | rhea12345
+        // felomino.alba@dssc.edu.ph   | felomino123
 
         $users = [
             [
                 'name' => 'Nel Panaligan',
-                'email' => 'nel@dssc.edu.ph',
-                'password' => Hash::make('password123'),
+                'email' => 'nel.panaligan@dssc.edu.ph',
+                'password' => Hash::make('nel12345'),
                 'role' => 'program_head',
                 'department' => 'BSIT',
                 'status' => 'active',
             ],
             [
                 'name' => 'Rhea Mae Perito',
-                'email' => 'rhea@dssc.edu.ph',
-                'password' => Hash::make('password123'),
+                'email' => 'rhea.perito@dssc.edu.ph',
+                'password' => Hash::make('rhea12345'),
                 'role' => 'program_head',
                 'department' => 'BSIS',
                 'status' => 'active',
             ],
             [
                 'name' => 'Felomino Alba',
-                'email' => 'felomino@dssc.edu.ph',
-                'password' => Hash::make('password123'),
+                'email' => 'felomino.alba@dssc.edu.ph',
+                'password' => Hash::make('felomino123'),
                 'role' => 'dean',
-                'department' => 'All',
+                'department' => 'General Studies',
                 'status' => 'active',
             ],
         ];

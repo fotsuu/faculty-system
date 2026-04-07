@@ -22,23 +22,39 @@ class DeanController extends Controller
         // Get all faculty members (users with role 'faculty')
         $facultyIds = User::where('role', 'faculty')->pluck('id');
         $totalFaculty = $facultyIds->count();
+
+        // Faculty scope that has uploaded class records.
+        $analyticsFacultyIds = Record::whereIn('user_id', $facultyIds)
+            ->whereNotNull('file_name')
+            ->distinct()
+            ->pluck('user_id');
+        if ($analyticsFacultyIds->isEmpty()) {
+            $analyticsFacultyIds = $facultyIds;
+        }
         
         // Get total students across all faculty subjects
-        $totalStudents = Student::whereIn('id', Record::whereIn('user_id', $facultyIds)->distinct('student_id')->pluck('student_id'))->count();
+        $totalStudents = Student::whereIn('id', Record::whereIn('user_id', $analyticsFacultyIds)->distinct('student_id')->pluck('student_id'))->count();
         
         // Get total records from faculty users
-        $totalRecords = Record::whereIn('user_id', $facultyIds)->count();
+        $totalRecords = Record::whereIn('user_id', $analyticsFacultyIds)
+            ->whereNotNull('file_name')
+            ->count();
 
         // Calculate growth (mock growth for now or calculate from dates)
         $now = now();
-        $currentMonth = Record::where('created_at', '>=', $now->copy()->startOfMonth())->count();
-        $lastMonth = Record::where('created_at', '>=', $now->copy()->subMonth()->startOfMonth())
+        $currentMonth = Record::whereIn('user_id', $analyticsFacultyIds)
+            ->whereNotNull('file_name')
+            ->where('created_at', '>=', $now->copy()->startOfMonth())
+            ->count();
+        $lastMonth = Record::whereIn('user_id', $analyticsFacultyIds)
+            ->whereNotNull('file_name')
+            ->where('created_at', '>=', $now->copy()->subMonth()->startOfMonth())
             ->where('created_at', '<', $now->copy()->startOfMonth())
             ->count();
         $recordsGrowthPercent = $lastMonth > 0 ? round((($currentMonth - $lastMonth) / $lastMonth) * 100) : ($currentMonth > 0 ? 100 : 0);
         
         // Use AnalyticsService for accurate analytics scoped to faculty (with optional subject/section filter)
-        $analyticsService = (new \App\Services\AnalyticsService($facultyIds->toArray()))
+        $analyticsService = (new \App\Services\AnalyticsService($analyticsFacultyIds->toArray()))
             ->setFilters($selectedSubjectId, $selectedSection);
         $analytics = $analyticsService->generateAnalytics();
         
@@ -49,7 +65,9 @@ class DeanController extends Controller
         $passRatePercent = $totalAll > 0 ? round(($totalPass / $totalAll) * 100) : 0;
 
         // Get class record submissions (grouped by faculty and subject)
-        $submissions = Record::with(['user', 'subject'])
+        $submissions = Record::whereIn('user_id', $analyticsFacultyIds)
+            ->whereNotNull('file_name')
+            ->with(['user', 'subject'])
             ->when($selectedSubjectId, fn ($q) => $q->where('subject_id', $selectedSubjectId))
             ->when(is_string($selectedSection) && $selectedSection !== '', function ($q) use ($selectedSection) {
                 if (strcasecmp($selectedSection, 'Unassigned') === 0) {
@@ -85,10 +103,11 @@ class DeanController extends Controller
             ->values();
         
         // Get top performing students
-        $topStudents = Student::whereIn('id', Record::whereIn('user_id', $facultyIds)->distinct()->pluck('student_id'))->get()
-            ->map(function($student) use ($facultyIds, $selectedSubjectId, $selectedSection) {
+        $topStudents = Student::whereIn('id', Record::whereIn('user_id', $analyticsFacultyIds)->distinct()->pluck('student_id'))->get()
+            ->map(function($student) use ($analyticsFacultyIds, $selectedSubjectId, $selectedSection) {
                 $records = Record::where('student_id', $student->id)
-                    ->whereIn('user_id', $facultyIds)
+                    ->whereIn('user_id', $analyticsFacultyIds)
+                    ->whereNotNull('file_name')
                     ->when($selectedSubjectId, fn ($q) => $q->where('subject_id', $selectedSubjectId))
                     ->when(is_string($selectedSection) && $selectedSection !== '', function ($q) use ($selectedSection) {
                         if (strcasecmp($selectedSection, 'Unassigned') === 0) {
@@ -134,12 +153,13 @@ class DeanController extends Controller
             ->orderBy('created_at', 'desc')
             ->get();
             
-        $filterSubjects = Subject::whereIn('user_id', $facultyIds)
+        $filterSubjects = Subject::whereIn('user_id', $analyticsFacultyIds)
             ->where('status', 'active')
             ->orderBy('code')
             ->get(['id', 'code', 'name']);
 
-        $sectionsQuery = Record::whereIn('user_id', $facultyIds);
+        $sectionsQuery = Record::whereIn('user_id', $analyticsFacultyIds)
+            ->whereNotNull('file_name');
         if ($selectedSubjectId) {
             $sectionsQuery->where('subject_id', $selectedSubjectId);
         }
@@ -154,6 +174,36 @@ class DeanController extends Controller
             ->unique()
             ->sort()
             ->values();
+
+        $subjectSectionOptions = collect();
+        foreach ($filterSubjects as $subjectOption) {
+            $subjectSections = Record::whereIn('user_id', $analyticsFacultyIds)
+                ->whereNotNull('file_name')
+                ->where('subject_id', $subjectOption->id)
+                ->select('section')
+                ->distinct()
+                ->pluck('section')
+                ->map(function ($s) {
+                    $s = is_string($s) ? trim($s) : '';
+                    return $s === '' ? 'Unassigned' : $s;
+                })
+                ->unique()
+                ->sort()
+                ->values();
+
+            if ($subjectSections->isEmpty()) {
+                $subjectSections = collect(['Unassigned']);
+            }
+
+            foreach ($subjectSections as $sec) {
+                $subjectSectionOptions->push([
+                    'value' => $subjectOption->id . '||' . $sec,
+                    'subject_id' => $subjectOption->id,
+                    'section' => $sec,
+                    'label' => $subjectOption->code . ' - ' . $sec,
+                ]);
+            }
+        }
             
         return view('dashboard.dean', [
             'totalFaculty' => $totalFaculty,
@@ -167,6 +217,7 @@ class DeanController extends Controller
             'gradeDistribution' => $analytics['gradeDistribution'],
             'attendanceTrends' => $analytics['attendanceTrends'],
             'allFaculty' => $allFaculty,
+            'subjects' => $filterSubjects,
             'analytics' => $analytics,
             'totalPass' => $totalPass,
             'totalFail' => $totalFail,
@@ -175,6 +226,7 @@ class DeanController extends Controller
             'filterSections' => $filterSections,
             'selectedSubjectId' => $selectedSubjectId,
             'selectedSection' => $selectedSection,
+            'subjectSectionOptions' => $subjectSectionOptions,
         ]);
     }
     

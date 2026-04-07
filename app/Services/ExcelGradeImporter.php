@@ -271,19 +271,26 @@ class ExcelGradeImporter
         $stats['records_saved']++;
 
         // Process each score/assessment column
+        $columnIndex = 0;
         foreach ($data as $column => $value) {
-            if (empty(trim($value)) || !is_numeric($value)) {
-                continue; // Skip empty or non-numeric values
-            }
-
-            $assessment = $this->categorizeAssessment($column);
+            $assessment = $this->categorizeAssessment($column, $columnIndex);
             if (!$assessment) {
-                if (is_numeric($value)) {
-                    // Log::info("Numeric Skip: " . $column . " = " . $value);
-                }
-                continue; // Skip if column cannot be categorized
+                $columnIndex++;
+                continue;
             }
 
+            // Attendance can be symbolic (P/A/L/etc), not strictly numeric.
+            if ($assessment['type'] !== 'attendance') {
+                if (trim((string) $value) === '' || !is_numeric($value)) {
+                    $columnIndex++;
+                    continue;
+                }
+            } else {
+                if (trim((string) $value) === '') {
+                    $columnIndex++;
+                    continue;
+                }
+            }
 
             $score = (float) $value;
 
@@ -301,6 +308,7 @@ class ExcelGradeImporter
                     $this->importFinal($student, $subject, $score, $assessment, $stats);
                     break;
             }
+            $columnIndex++;
         }
 
         // Update grade summary for this subject/student
@@ -362,8 +370,8 @@ class ExcelGradeImporter
         } elseif (in_array($normalized, ["absent", "a", "no", "n"], true)) {
             $status = "absent";
         } else {
-            // Default for unknown but non-empty values
-            $status = "present";
+            // Safer default: unknown symbols should not inflate attendance.
+            $status = "absent";
         }
 
         StudentAttendance::updateOrCreate(
@@ -371,11 +379,12 @@ class ExcelGradeImporter
                 "user_id" => $this->user->id,
                 "subject_id" => $subject->id,
                 "student_id" => $student->id,
+                "attendance_type" => $assessment["subtype"] ?? "non_laboratory",
                 "session_number" => $assessment["number"] ?? 1,
             ],
             [
                 "status" => $status,
-                "session_date" => now(),
+                "session_date" => $assessment["date"] ?? null,
                 "notes" => "Imported from Excel",
             ]
         );
@@ -518,7 +527,7 @@ class ExcelGradeImporter
     /**
      * Categorize a column header as quiz, attendance, midterm, or final
      */
-    private function categorizeAssessment($column)
+    private function categorizeAssessment($column, $columnIndex = null)
     {
         $lower = strtolower(trim($column));
 
@@ -540,9 +549,22 @@ class ExcelGradeImporter
         // Attendance patterns (including dates like 09/11/2024 or A1, A2, Day 1)
         if (stripos($lower, 'attendance') !== false || stripos($lower, 'present') !== false || 
             preg_match('/\d{1,2}[\/-]\d{1,2}[\/-]\d{2,4}/', $lower) || // 09/11/2024
+            preg_match('/^\d{1,2}[\/-]\d{1,2}$/', $lower) || // 08-22 or 08/22
+            preg_match('/^\d+$/', $lower) || // session index only: 1,2,3...
             preg_match('/^(a|att|attendance|day|week|session|day)\s*\d+$/i', $lower)) { // A1, Day 1, Week 1, Session 1
-            $number = $this->extractNumber($lower) ?? 1;
-            return ['type' => 'attendance', 'number' => $number];
+            $number = $this->extractNumber($lower);
+            if (preg_match('/^\d{1,2}[\/-]\d{1,2}(?:[\/-]\d{2,4})?$/', $lower)) {
+                // Date-like attendance headers should not collide on month/day integers.
+                $number = is_numeric($columnIndex) ? ((int)$columnIndex + 1) : ($number ?? 1);
+            } else {
+                $number = $number ?? (is_numeric($columnIndex) ? ((int)$columnIndex + 1) : 1);
+            }
+            return [
+                'type' => 'attendance',
+                'number' => $number,
+                'date' => $this->parseAttendanceSessionDate($column),
+                'subtype' => 'non_laboratory',
+            ];
         }
 
         // Quiz patterns (includes L1, L2 for Laboratory Quizzes if not matched as attendance)
@@ -558,6 +580,30 @@ class ExcelGradeImporter
         if (stripos($lower, 'laboratory activities') !== false || (stripos($lower, 'lab activities') !== false && stripos($lower, 'total') === false)) {
             $number = $this->extractNumber($lower) ?? 1;
             return ['type' => 'quiz', 'subtype' => 'laboratory', 'number' => $number];
+        }
+
+        return null;
+    }
+
+    private function parseAttendanceSessionDate($column)
+    {
+        $raw = trim((string) $column);
+        if ($raw === '') {
+            return null;
+        }
+
+        // Common formats from attendance sheets: mm-dd, mm/dd, mm-dd-yyyy, mm/dd/yyyy
+        if (preg_match('/^(\d{1,2})[\/-](\d{1,2})(?:[\/-](\d{2,4}))?$/', $raw, $m)) {
+            $month = (int) $m[1];
+            $day = (int) $m[2];
+            $year = isset($m[3]) && $m[3] !== '' ? (int) $m[3] : (int) now()->year;
+            if ($year < 100) {
+                $year += 2000;
+            }
+
+            if (checkdate($month, $day, $year)) {
+                return sprintf('%04d-%02d-%02d', $year, $month, $day);
+            }
         }
 
         return null;
