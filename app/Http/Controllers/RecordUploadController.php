@@ -35,6 +35,36 @@ class RecordUploadController extends Controller
 
             // Parse file to build preview (do not import yet)
             $previewData = $this->parseAndExtractPreview($file, $user, $name, $path);
+
+            // Rename file if subject info is detected in meta
+            $meta = $previewData['meta'] ?? [];
+            if (empty($meta) && !empty($previewData['datasets'][0]['meta'])) {
+                $meta = $previewData['datasets'][0]['meta'];
+            }
+
+            if (!empty($meta['subject_code']) || !empty($meta['subject'])) {
+                $subjectInfo = $meta['subject_code'] ?? $meta['subject'];
+                $cleanSubject = preg_replace('/[^A-Za-z0-9]/', '', $subjectInfo);
+                $sectionInfo = $meta['section'] ?? '';
+                $cleanSection = preg_replace('/[^A-Za-z0-9]/', '', $sectionInfo);
+                
+                $extension = $file->getClientOriginalExtension();
+                $displayName = $cleanSubject . ($cleanSection ? $cleanSection : '') . '.' . $extension;
+                $newName = time() . '_' . $displayName;
+                
+                $newPath = 'uploads/' . $newName;
+                if (\Storage::move($path, $newPath)) {
+                    $name = $newName;
+                    $path = $newPath;
+                    $previewData['filename'] = $displayName; // Use clean name for display/DB
+                    if (isset($previewData['datasets'])) {
+                        foreach ($previewData['datasets'] as &$ds) {
+                            $ds['filename'] = $displayName;
+                        }
+                    }
+                }
+            }
+
             // save preview (and metadata) in session for later import when analytics generated
             session([ 'excel_preview_data' => $previewData ]);
 

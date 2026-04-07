@@ -166,6 +166,124 @@ class DeanController extends Controller
         return back()->with('status', 'Profile updated successfully!');
     }
 
+    public function classRecords()
+    {
+        // For Dean, show ALL faculty records across ALL departments
+        $facultyIds = User::where('role', 'faculty')->pluck('id');
+
+        $classRecordGroups = Record::whereIn('user_id', $facultyIds)
+            ->whereNotNull('file_name')
+            ->with('user')
+            ->get()
+            ->groupBy(function ($record) {
+                return $record->user_id . '||' . $record->file_name;
+            })
+            ->map(function ($group) {
+                $first = $group->first();
+                $fileName = $first->file_name;
+                // Strip numeric prefix like 1775451194_ for display
+                $displayName = preg_replace('/^\d+_/', '', $fileName);
+                
+                return (object) [
+                    'user_id' => $first->user_id,
+                    'file_name' => $fileName,
+                    'display_name' => $displayName,
+                    'uploaded_by' => $first->user->name ?? 'Unknown Faculty',
+                    'department' => $first->user->department ?? 'N/A',
+                    'uploaded_at' => $group->min('created_at'),
+                    'record_count' => $group->count(),
+                    'subject_count' => $group->pluck('subject_id')->unique()->count(),
+                ];
+            })
+            ->sortByDesc('uploaded_at')
+            ->values();
+
+        return view('dean.class-records', [
+            'classRecordGroups' => $classRecordGroups,
+        ]);
+    }
+
+    public function viewClassRecord(Request $request)
+    {
+        $userId = $request->query('user_id');
+        $fileName = $request->query('file_name');
+        
+        if (!$userId || !$fileName) {
+            return redirect()->route('dean.class-records')->with('error', 'Missing parameters.');
+        }
+
+        $records = Record::where('user_id', $userId)
+            ->where('file_name', $fileName)
+            ->with(['student', 'subject', 'user'])
+            ->get();
+
+        if ($records->isEmpty()) {
+            return redirect()->route('dean.class-records')->with('error', 'Record not found.');
+        }
+
+        $uploader = $records->first()->user->name ?? 'Unknown Faculty';
+        $uploadedAt = $records->min('created_at');
+        
+        // Strip numeric prefix for display
+        $displayName = preg_replace('/^\d+_/', '', $fileName);
+
+        // Group records by section for separate display
+        $scoreKeys = collect();
+        foreach ($records as $record) {
+            $scores = $record->scores;
+            if (is_string($scores)) {
+                $scores = json_decode($scores, true);
+            }
+            if (!is_array($scores)) {
+                continue;
+            }
+
+            foreach ($scores as $key => $value) {
+                if (!$scoreKeys->contains($key)) {
+                    $scoreKeys->push($key);
+                }
+            }
+        }
+
+        $excelBySection = null;
+        if ($scoreKeys->isNotEmpty()) {
+            $rows = [];
+            foreach ($records as $record) {
+                $scores = $record->scores;
+                if (is_string($scores)) {
+                    $scores = json_decode($scores, true);
+                }
+                if (!is_array($scores)) {
+                    continue;
+                }
+
+                $row = [];
+                foreach ($scoreKeys as $key) {
+                    $row[] = isset($scores[$key]) ? $scores[$key] : '';
+                }
+
+                $rows[] = [
+                    'section' => trim((string)$record->section) === '' ? 'Unassigned' : trim((string)$record->section),
+                    'row' => $row,
+                ];
+            }
+
+            $excelBySection = collect($rows)->groupBy('section')->map(function ($sectionRows) {
+                return $sectionRows->pluck('row')->all();
+            });
+        }
+
+        return view('dean.view-record', [
+            'records' => $records,
+            'fileName' => $fileName,
+            'displayName' => $displayName,
+            'uploader' => $uploader,
+            'uploadedAt' => $uploadedAt,
+            'excelBySection' => $excelBySection,
+            'headers' => $scoreKeys->toArray(),
+        ]);
+    }
+
     public function viewSubmission($userId, $subjectId)
     {
         // Get all records for this faculty-subject combination

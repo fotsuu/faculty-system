@@ -35,14 +35,14 @@
             width: 100%;
             max-width: 1200px;
             background: white;
-            min-height: 500px;
+            min-height: auto;
             box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
         }
         
         .left-section {
             flex: 1;
             background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
-            padding: 60px 40px;
+            padding: 40px 40px;
             color: white;
             display: flex;
             flex-direction: column;
@@ -82,7 +82,7 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            margin-bottom: 30px;
+            margin-bottom: 16px;
             position: relative;
             z-index: 1;
             background: rgba(255, 255, 255, 0.1);
@@ -97,7 +97,7 @@
         .left-section h1 {
             font-size: 36px;
             font-weight: 700;
-            margin-bottom: 10px;
+            margin-bottom: 4px;
             text-align: center;
             position: relative;
             z-index: 1;
@@ -110,27 +110,26 @@
             position: relative;
             z-index: 1;
             opacity: 0.95;
+            margin: 0;
         }
         
         .right-section {
             flex: 1;
-            padding: 60px 50px;
+            padding: 40px 50px;
             display: flex;
             flex-direction: column;
             justify-content: center;
-            max-height: 600px;
-            overflow-y: auto;
         }
         
         .right-section h2 {
             font-size: 32px;
             font-weight: 700;
             color: #1e3c72;
-            margin-bottom: 30px;
+            margin-bottom: 18px;
         }
         
         .form-group {
-            margin-bottom: 18px;
+            margin-bottom: 14px;
         }
         
         label {
@@ -138,7 +137,7 @@
             font-size: 13px;
             font-weight: 500;
             color: #333;
-            margin-bottom: 6px;
+            margin-bottom: 4px;
         }
         
         select,
@@ -147,7 +146,7 @@
         input[type="password"],
         input[type="confirm-password"] {
             width: 100%;
-            padding: 10px 16px;
+            padding: 8px 14px;
             border: 1px solid #ddd;
             border-radius: 4px;
             font-size: 13px;
@@ -183,14 +182,14 @@
         .form-row {
             display: grid;
             grid-template-columns: 1fr 1fr;
-            gap: 15px;
+            gap: 12px;
         }
         
         .checkbox-group {
             display: flex;
             align-items: flex-start;
-            margin-bottom: 20px;
-            margin-top: 10px;
+            margin-bottom: 12px;
+            margin-top: 8px;
             gap: 8px;
         }
         
@@ -222,11 +221,11 @@
         .button-group {
             display: flex;
             gap: 10px;
-            margin-top: 25px;
+            margin-top: 14px;
         }
         
         button {
-            padding: 11px 20px;
+            padding: 9px 18px;
             border: none;
             border-radius: 4px;
             font-size: 14px;
@@ -261,7 +260,7 @@
         
         .footer {
             text-align: center;
-            margin-top: 20px;
+            margin-top: 12px;
             font-size: 11px;
             color: #999;
         }
@@ -279,7 +278,7 @@
             background-color: #d4edda;
             border: 1px solid #c3e6cb;
             border-radius: 4px;
-            margin-bottom: 20px;
+            margin-bottom: 12px;
         }
         
         @media (max-width: 768px) {
@@ -289,12 +288,11 @@
             }
             
             .left-section {
-                padding: 40px 30px;
+                padding: 30px 30px;
             }
             
             .right-section {
-                padding: 40px 30px;
-                max-height: none;
+                padding: 30px 30px;
             }
             
             .logo-circle {

@@ -302,6 +302,159 @@ class DashboardController extends Controller
         ]);
     }
 
+    /** Program Head Reports: View all reports submitted by their department faculty. */
+    public function programHeadReports()
+    {
+        $user = Auth::user();
+        
+        // Get all faculty in the same department as the program head
+        $facultyIds = User::where('role', 'faculty')
+            ->when($user->department, function ($q) use ($user) {
+                $dept = trim($user->department);
+                $q->where(function ($sub) use ($dept) {
+                    $sub->whereRaw('LOWER(department) = ?', [strtolower($dept)])
+                        ->orWhere('department', 'like', $dept . '%');
+                });
+            })
+            ->pluck('id');
+
+        // Get all reports submitted by their department faculty
+        $facultyReports = GeneratedReport::whereIn('user_id', $facultyIds)
+            ->with('user')
+            ->orderByDesc('created_at')
+            ->get();
+
+        return view('program-head.reports', [
+            'facultyReports' => $facultyReports,
+        ]);
+    }
+
+    public function programHeadClassRecords()
+    {
+        $user = Auth::user();
+
+        $facultyIds = User::where('role', 'faculty')
+            ->when($user->department, function ($q) use ($user) {
+                $dept = trim($user->department);
+                $q->where(function ($sub) use ($dept) {
+                    $sub->whereRaw('LOWER(department) = ?', [strtolower($dept)])
+                        ->orWhere('department', 'like', $dept . '%');
+                });
+            })
+            ->pluck('id');
+
+        $classRecordGroups = Record::whereIn('user_id', $facultyIds)
+            ->whereNotNull('file_name')
+            ->with('user')
+            ->get()
+            ->groupBy(function ($record) {
+                return $record->user_id . '||' . $record->file_name;
+            })
+            ->map(function ($group) {
+                $first = $group->first();
+                $fileName = $first->file_name;
+                // Strip numeric prefix like 1775451194_ for display
+                $displayName = preg_replace('/^\d+_/', '', $fileName);
+                
+                return (object) [
+                    'user_id' => $first->user_id,
+                    'file_name' => $fileName,
+                    'display_name' => $displayName,
+                    'uploaded_by' => $first->user->name ?? 'Unknown Faculty',
+                    'uploaded_at' => $group->min('created_at'),
+                    'record_count' => $group->count(),
+                    'subject_count' => $group->pluck('subject_id')->unique()->count(),
+                ];
+            })
+            ->sortByDesc('uploaded_at')
+            ->values();
+
+        return view('program-head.class-records', [
+            'classRecordGroups' => $classRecordGroups,
+        ]);
+    }
+
+    public function programHeadViewClassRecord(Request $request)
+    {
+        $userId = $request->query('user_id');
+        $fileName = $request->query('file_name');
+        
+        if (!$userId || !$fileName) {
+            return redirect()->route('program-head.class-records')->with('error', 'Missing parameters.');
+        }
+
+        $records = Record::where('user_id', $userId)
+            ->where('file_name', $fileName)
+            ->with(['student', 'subject', 'user'])
+            ->get();
+
+        if ($records->isEmpty()) {
+            return redirect()->route('program-head.class-records')->with('error', 'Record not found.');
+        }
+
+        $uploader = $records->first()->user->name ?? 'Unknown Faculty';
+        $uploadedAt = $records->min('created_at');
+        
+        // Strip numeric prefix for display
+        $displayName = preg_replace('/^\d+_/', '', $fileName);
+
+        // Group records by section for separate display, matching faculty module style
+        $scoreKeys = collect();
+        foreach ($records as $record) {
+            $scores = $record->scores;
+            if (is_string($scores)) {
+                $scores = json_decode($scores, true);
+            }
+            if (!is_array($scores)) {
+                continue;
+            }
+
+            foreach ($scores as $key => $value) {
+                if (!$scoreKeys->contains($key)) {
+                    $scoreKeys->push($key);
+                }
+            }
+        }
+
+        $excelBySection = null;
+        if ($scoreKeys->isNotEmpty()) {
+            $rows = [];
+            foreach ($records as $record) {
+                $scores = $record->scores;
+                if (is_string($scores)) {
+                    $scores = json_decode($scores, true);
+                }
+                if (!is_array($scores)) {
+                    continue;
+                }
+
+                $row = [];
+                foreach ($scoreKeys as $key) {
+                    $row[] = isset($scores[$key]) ? $scores[$key] : '';
+                }
+
+                $rows[] = [
+                    'section' => trim((string)$record->section) === '' ? 'Unassigned' : trim((string)$record->section),
+                    'row' => $row,
+                ];
+            }
+
+            $excelBySection = collect($rows)->groupBy('section')->map(function ($sectionRows) {
+                return $sectionRows->pluck('row')->all();
+            });
+        }
+
+        return view('program-head.view-record', [
+            'records' => $records,
+            'fileName' => $fileName,
+            'displayName' => $displayName,
+            'uploader' => $uploader,
+            'uploadedAt' => $uploadedAt,
+            'excelBySection' => $excelBySection,
+            'headers' => $scoreKeys->toArray(),
+        ]);
+    }
+
     public function students()
     {
         $user = Auth::user();
@@ -788,12 +941,24 @@ class DashboardController extends Controller
     {
         $user = Auth::user();
         
-        // Allow faculty to view their own reports, program heads to view reports assigned to them, and dean to view everything
+        // Allow faculty to view their own reports, program heads to view reports from their faculty, and dean to view everything
         $isOwner = $report->user_id === $user->id;
         $isRecipient = $user->role !== 'faculty' && $report->recipient_id === $user->id && $report->submitted_at !== null;
         $isDean = $user->role === 'dean';
         
-        if (!$isOwner && !$isRecipient && !$isDean) {
+        // Check if program head can view report from their department faculty
+        $isProgramHeadCanView = false;
+        if ($user->role === 'program_head') {
+            $reportOwner = User::find($report->user_id);
+            if ($reportOwner && $reportOwner->role === 'faculty') {
+                $dept = trim($user->department);
+                $reportDept = trim($reportOwner->department ?? '');
+                $isProgramHeadCanView = strtolower($dept) === strtolower($reportDept) || 
+                                       strpos($reportDept, $dept) === 0;
+            }
+        }
+        
+        if (!$isOwner && !$isRecipient && !$isDean && !$isProgramHeadCanView) {
             abort(403);
         }
 
