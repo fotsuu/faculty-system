@@ -15,6 +15,8 @@ use Illuminate\Support\Facades\DB;
 class AnalyticsService
 {
     private $userIds;
+    private ?int $subjectId = null;
+    private ?string $section = null;
 
     /**
      * @param int|array|null $userIds User ID, array of User IDs, or null for all users
@@ -29,12 +31,66 @@ class AnalyticsService
     }
 
     /**
+     * Apply optional subject/section filters.
+     *
+     * @param int|null $subjectId Subject primary key (subjects.id)
+     * @param string|null $section Record section label (e.g. "BSIT-3A" or "Unassigned")
+     */
+    public function setFilters(?int $subjectId = null, ?string $section = null): self
+    {
+        $this->subjectId = $subjectId ?: null;
+        $section = is_string($section) ? trim($section) : null;
+        $this->section = ($section === '') ? null : $section;
+        return $this;
+    }
+
+    /**
      * Apply user_id filter to a query if userIds is set
      */
     private function applyUserFilter($query)
     {
         if ($this->userIds !== null) {
             return $query->whereIn('user_id', $this->userIds);
+        }
+        return $query;
+    }
+
+    private function applySubjectFilter($query, string $column = 'subject_id')
+    {
+        if ($this->subjectId !== null) {
+            return $query->where($column, $this->subjectId);
+        }
+        return $query;
+    }
+
+    private function applySectionFilterToRecords($query)
+    {
+        if ($this->section === null) {
+            return $query;
+        }
+
+        if (strcasecmp($this->section, 'Unassigned') === 0) {
+            return $query->where(function ($q) {
+                $q->whereNull('section')->orWhere('section', '');
+            });
+        }
+
+        return $query->where('section', $this->section);
+    }
+
+    private function applyRecordFilters($query)
+    {
+        $query = $this->applyUserFilter($query);
+        $query = $this->applySubjectFilter($query, 'subject_id');
+        $query = $this->applySectionFilterToRecords($query);
+        return $query;
+    }
+
+    private function applySubjectListFilters($query)
+    {
+        $query = $this->applyUserFilter($query);
+        if ($this->subjectId !== null) {
+            $query = $query->where('id', $this->subjectId);
         }
         return $query;
     }
@@ -63,10 +119,10 @@ class AnalyticsService
     public function getPassFailRates()
     {
         $subjects = Subject::query();
-        $subjects = $this->applyUserFilter($subjects)->get();
+        $subjects = $this->applySubjectListFilters($subjects)->get();
         
         return $subjects->map(function ($subject) {
-            $records = Record::where('subject_id', $subject->id)->get();
+            $records = $this->applyRecordFilters(Record::where('subject_id', $subject->id))->get();
             // In the 1.0-5.0 scale, a grade of 3.0 or better (lower) is passing. 5.0 is fail.
             $passCount = $records->filter(fn($r) => !is_null($r->grade_point) && $r->grade_point > 0 && $r->grade_point <= 3.0)->count();
             
@@ -101,8 +157,7 @@ class AnalyticsService
      */
     public function getGradeDistribution()
     {
-        $records = Record::query();
-        $records = $this->applyUserFilter($records)->get();
+        $records = $this->applyRecordFilters(Record::query())->get();
         
         $distribution = [
             'A' => 0, // 1.0 - 1.25
@@ -137,8 +192,7 @@ class AnalyticsService
      */
     public function getDetailedGradeDistribution()
     {
-        $records = Record::query();
-        $records = $this->applyUserFilter($records)->get();
+        $records = $this->applyRecordFilters(Record::query())->get();
         
         $gradePoints = [];
         $totalRecords = $records->count();
@@ -189,7 +243,7 @@ class AnalyticsService
 
         foreach ($yearLevels as $yearLevel) {
             $records = Record::whereHas('student', fn($q) => $q->where('year_level', $yearLevel));
-            $records = $this->applyUserFilter($records)->get();
+            $records = $this->applyRecordFilters($records)->get();
 
             $passCount = $records->filter(fn($r) => !is_null($r->grade_point) && $r->grade_point > 0 && $r->grade_point <= 3.0)->count();
             $otherPass = $records->filter(function($r) {
@@ -220,7 +274,7 @@ class AnalyticsService
 
         foreach ($yearLevels as $yearLevel) {
             $records = Record::whereHas('student', fn($q) => $q->where('year_level', $yearLevel));
-            $records = $this->applyUserFilter($records)->get();
+            $records = $this->applyRecordFilters($records)->get();
 
             $distribution = ['A' => 0, 'B' => 0, 'C' => 0, 'D' => 0, 'F' => 0];
             foreach ($records as $record) {
@@ -258,12 +312,18 @@ class AnalyticsService
         // Per-semester attendance computed from recorded StudentAttendance entries.
         // If missing, fallback to legacy Record.scores attendance parsing.
         $subjects = Subject::query();
-        $subjects = $this->applyUserFilter($subjects)->get();
+        $subjects = $this->applySubjectListFilters($subjects)->get();
 
         return $subjects->map(function ($subject) {
-            $attendanceQuery = StudentAttendance::where('subject_id', $subject->id);
-            $attendanceQuery = $this->applyUserFilter($attendanceQuery);
-            $attendances = $attendanceQuery->get();
+            // If section filter is active, StudentAttendance has no section column;
+            // compute from legacy Record.scores to keep section-scoping consistent.
+            $attendances = collect();
+            if ($this->section === null) {
+                $attendanceQuery = StudentAttendance::where('subject_id', $subject->id);
+                $attendanceQuery = $this->applyUserFilter($attendanceQuery);
+                $attendanceQuery = $this->applySubjectFilter($attendanceQuery, 'subject_id');
+                $attendances = $attendanceQuery->get();
+            }
 
             $presentCount = $attendances->where('status', 'present')->count();
             $lateCount = $attendances->where('status', 'late')->count();
@@ -298,7 +358,7 @@ class AnalyticsService
     private function computeAttendanceFromRecordScoresBySubject($subjectId)
     {
         $records = Record::where('subject_id', $subjectId);
-        $records = $this->applyUserFilter($records)->get();
+        $records = $this->applyRecordFilters($records)->get();
 
         $presentCount = 0;
         $lateCount = 0;
@@ -554,7 +614,9 @@ class AnalyticsService
     public function getQuizAnalytics()
     {
         $quizzes = StudentQuiz::query();
-        $quizzes = $this->applyUserFilter($quizzes)->get();
+        $quizzes = $this->applyUserFilter($quizzes);
+        $quizzes = $this->applySubjectFilter($quizzes, 'subject_id');
+        $quizzes = $quizzes->get();
         
         $labQuizzes = $quizzes->where('quiz_type', 'laboratory');
         $nonLabQuizzes = $quizzes->where('quiz_type', 'non_laboratory');
@@ -588,10 +650,14 @@ class AnalyticsService
     public function getExamAnalytics()
     {
         $midterms = StudentMidtermExam::query();
-        $midterms = $this->applyUserFilter($midterms)->get();
+        $midterms = $this->applyUserFilter($midterms);
+        $midterms = $this->applySubjectFilter($midterms, 'subject_id');
+        $midterms = $midterms->get();
         
         $finals = StudentFinalExam::query();
-        $finals = $this->applyUserFilter($finals)->get();
+        $finals = $this->applyUserFilter($finals);
+        $finals = $this->applySubjectFilter($finals, 'subject_id');
+        $finals = $finals->get();
         
         return [
             'midterm' => [
@@ -617,7 +683,9 @@ class AnalyticsService
     public function getStudentPerformance()
     {
         $students = StudentGradeSummary::query();
-        $students = $this->applyUserFilter($students)
+        $students = $this->applyUserFilter($students);
+        $students = $this->applySubjectFilter($students, 'subject_id');
+        $students = $students
             ->orderByDesc('final_numeric_grade')
             ->limit(10)
             ->get()
@@ -645,19 +713,28 @@ class AnalyticsService
     public function getSubjectSummary()
     {
         $subjects = Subject::query();
-        $subjects = $this->applyUserFilter($subjects)->get();
+        $subjects = $this->applySubjectListFilters($subjects)->get();
         
         return $subjects->map(function ($subject) {
-            $records = Record::where('subject_id', $subject->id)->get();
+            $records = $this->applyRecordFilters(Record::where('subject_id', $subject->id))->get();
             $students = $records->unique('student_id')->count();
             
-            $summaries = StudentGradeSummary::where('subject_id', $subject->id)->get();
+            $summaries = StudentGradeSummary::where('subject_id', $subject->id);
+            $summaries = $this->applyUserFilter($summaries);
+            $summaries = $this->applySubjectFilter($summaries, 'subject_id');
+            $summaries = $summaries->get();
             $avgFinalGrade = $summaries->isNotEmpty() ? $summaries->avg('final_numeric_grade') : 0;
             
-            $quizzes = StudentQuiz::where('subject_id', $subject->id)->get();
+            $quizzes = StudentQuiz::where('subject_id', $subject->id);
+            $quizzes = $this->applyUserFilter($quizzes);
+            $quizzes = $this->applySubjectFilter($quizzes, 'subject_id');
+            $quizzes = $quizzes->get();
             $quizAvg = $quizzes->isNotEmpty() ? $quizzes->avg('score') : 0;
             
-            $attendance = StudentAttendance::where('subject_id', $subject->id)->get();
+            $attendance = StudentAttendance::where('subject_id', $subject->id);
+            $attendance = $this->applyUserFilter($attendance);
+            $attendance = $this->applySubjectFilter($attendance, 'subject_id');
+            $attendance = $attendance->get();
             $presentCount = $attendance->where('status', 'present')->count();
             $attendancePercent = $attendance->count() > 0 
                 ? round(($presentCount / $attendance->count()) * 100, 1) 
@@ -685,7 +762,7 @@ class AnalyticsService
         $headers = ['Subject Code', 'Subject Name', 'Student ID', 'Student Name', 'Program', 'Year Level', 'Grade Point', 'Letter Grade', 'Raw Grade', 'Date', 'Semester', 'School Year', 'Section'];
         
         $records = Record::query();
-        $records = $this->applyUserFilter($records);
+        $records = $this->applyRecordFilters($records);
         
         if ($subjectId) {
             $records = $records->where('subject_id', $subjectId);

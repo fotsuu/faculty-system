@@ -8,7 +8,7 @@
         <div class="section-header">
             <div>
                 <h3 style="font-size: 18px; font-weight: 700; color: #1e3c72; margin-bottom: 4px;">Faculty Generated Reports</h3>
-                <div style="font-size: 13px; color: #64748b;">Reports submitted by your department faculty</div>
+                <div style="font-size: 13px; color: #64748b;">Reports submitted directly to your account</div>
             </div>
         </div>
 
@@ -58,7 +58,7 @@
         @else
             <div style="text-align: center; padding: 60px 20px; background: white; border-radius: 12px; border: 1px solid #edf2f7;">
                 <div style="font-size: 48px; margin-bottom: 16px; opacity: 0.2;">📋</div>
-                <p style="font-size: 14px; color: #64748b;">No faculty reports found in your department.</p>
+                <p style="font-size: 14px; color: #64748b;">No reports have been submitted to your account yet.</p>
             </div>
         @endif
     </div>

@@ -300,8 +300,8 @@
         <div class="section">
             <div class="section-header">
                 <div>
-                    <h3 class="section-title">Faculty Generated Reports (All Departments)</h3>
-                    <div class="section-subtitle">Monitor reports submitted by all faculty members</div>
+                    <h3 class="section-title">Faculty Generated Reports</h3>
+                    <div class="section-subtitle">Reports submitted directly to your dean account</div>
                 </div>
             </div>
             <div style="overflow-x: auto;">
@@ -330,7 +330,7 @@
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="6" style="text-align: center; padding: 30px; color: #999;">No faculty reports found.</td>
+                                <td colspan="6" style="text-align: center; padding: 30px; color: #999;">No reports have been submitted to your account yet.</td>
                             </tr>
                         @endforelse
                     </tbody>

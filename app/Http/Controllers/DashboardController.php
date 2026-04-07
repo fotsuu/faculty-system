@@ -22,6 +22,12 @@ class DashboardController extends Controller
     public function facultyDashboard()
     {
         $user = Auth::user();
+
+        $selectedSubjectId = request()->query('subject_id');
+        $selectedSubjectId = is_numeric($selectedSubjectId) ? (int) $selectedSubjectId : null;
+        $selectedSection = request()->query('section');
+        $selectedSection = is_string($selectedSection) ? trim($selectedSection) : null;
+        if ($selectedSection === '') $selectedSection = null;
         
         // Count unique uploaded class record files (unique file_name per user)
         $totalRecords = Record::where('user_id', $user->id)
@@ -38,7 +44,8 @@ class DashboardController extends Controller
         $activeSubjects = $totalRecords;
 
         // Use AnalyticsService for accurate analytics
-        $analyticsService = new \App\Services\AnalyticsService($user->id);
+        $analyticsService = (new \App\Services\AnalyticsService($user->id))
+            ->setFilters($selectedSubjectId, $selectedSection);
         $analytics = $analyticsService->generateAnalytics();
         
         // Get subjects with student counts and analytics
@@ -81,9 +88,19 @@ class DashboardController extends Controller
                 ->pluck('student_id')
         )
         ->get()
-        ->map(function ($student) use ($user) {
+        ->map(function ($student) use ($user, $selectedSubjectId, $selectedSection) {
             $records = Record::where('student_id', $student->id)
                 ->where('user_id', $user->id)
+                ->when($selectedSubjectId, fn ($q) => $q->where('subject_id', $selectedSubjectId))
+                ->when(is_string($selectedSection) && $selectedSection !== '', function ($q) use ($selectedSection) {
+                    if (strcasecmp($selectedSection, 'Unassigned') === 0) {
+                        $q->where(function ($subq) {
+                            $subq->whereNull('section')->orWhere('section', '');
+                        });
+                    } else {
+                        $q->where('section', $selectedSection);
+                    }
+                })
                 ->get();
             
             $recordCount = $records->count();
@@ -138,6 +155,27 @@ class DashboardController extends Controller
         // Get detailed grade point distribution for student performance report
         $detailedGradeDistribution = $analyticsService->getDetailedGradeDistribution();
 
+        $filterSubjects = Subject::where('user_id', $user->id)
+            ->where('status', 'active')
+            ->orderBy('code')
+            ->get(['id', 'code', 'name']);
+
+        $sectionsQuery = Record::where('user_id', $user->id);
+        if ($selectedSubjectId) {
+            $sectionsQuery->where('subject_id', $selectedSubjectId);
+        }
+        $filterSections = $sectionsQuery
+            ->select('section')
+            ->distinct()
+            ->pluck('section')
+            ->map(function ($s) {
+                $s = is_string($s) ? trim($s) : '';
+                return $s === '' ? 'Unassigned' : $s;
+            })
+            ->unique()
+            ->sort()
+            ->values();
+
         return view('dashboard.faculty', [
             'totalRecords' => $totalRecords,
             'totalStudents' => $totalStudents,
@@ -153,6 +191,10 @@ class DashboardController extends Controller
             'excelPreviewData' => $excelPreviewData ?? ['headers' => [], 'rows' => []],
             'showExcelModal' => $showExcelModal,
             'facultyReports' => $facultyReports,
+            'filterSubjects' => $filterSubjects,
+            'filterSections' => $filterSections,
+            'selectedSubjectId' => $selectedSubjectId,
+            'selectedSection' => $selectedSection,
         ]);
     }
 
@@ -160,6 +202,12 @@ class DashboardController extends Controller
     public function programHeadDashboard()
     {
         $user = Auth::user();
+        $selectedSubjectId = request()->query('subject_id');
+        $selectedSubjectId = is_numeric($selectedSubjectId) ? (int) $selectedSubjectId : null;
+        $selectedSection = request()->query('section');
+        $selectedSection = is_string($selectedSection) ? trim($selectedSection) : null;
+        if ($selectedSection === '') $selectedSection = null;
+
         $facultyIds = User::where('role', 'faculty')
             ->when($user->department, function ($q) use ($user) {
                 // Ensure case-insensitive department match and partial prefix handling (e.g. BSIT vs BSIT-3A)
@@ -206,15 +254,27 @@ class DashboardController extends Controller
 
         $totalFaculty = $facultyIds->count();
         
-        // Use AnalyticsService for accurate analytics
-        $analyticsService = new \App\Services\AnalyticsService($facultyIds->toArray());
+        // Use AnalyticsService for accurate analytics (scoped by optional subject/section)
+        $analyticsService = (new \App\Services\AnalyticsService($facultyIds->toArray()))
+            ->setFilters($selectedSubjectId, $selectedSection);
         $analytics = $analyticsService->generateAnalytics();
         
         $passFailRates = $analytics['passFailRates'];
         $gradeDistribution = $analytics['gradeDistribution'];
         $attendanceTrends = $analytics['attendanceTrends'];
         
-        $allRecords = Record::whereIn('user_id', $facultyIds)->get();
+        $allRecords = Record::whereIn('user_id', $facultyIds)
+            ->when($selectedSubjectId, fn ($q) => $q->where('subject_id', $selectedSubjectId))
+            ->when(is_string($selectedSection) && $selectedSection !== '', function ($q) use ($selectedSection) {
+                if (strcasecmp($selectedSection, 'Unassigned') === 0) {
+                    $q->where(function ($subq) {
+                        $subq->whereNull('section')->orWhere('section', '');
+                    });
+                } else {
+                    $q->where('section', $selectedSection);
+                }
+            })
+            ->get();
         $totalPass = collect($passFailRates)->sum('pass');
         $totalFail = collect($passFailRates)->sum('fail');
         $passRatePercent = collect($passFailRates)->isNotEmpty() ? (int) round(($totalPass / collect($passFailRates)->sum('total')) * 100) : 0;
@@ -249,8 +309,19 @@ class DashboardController extends Controller
             ])->values();
 
         $topStudents = Student::whereIn('id', Record::whereIn('user_id', $facultyIds)->distinct()->pluck('student_id'))->get()
-            ->map(function ($student) use ($facultyIds) {
-                $records = Record::where('student_id', $student->id)->whereIn('user_id', $facultyIds)->get();
+            ->map(function ($student) use ($facultyIds, $selectedSubjectId, $selectedSection) {
+                $records = Record::where('student_id', $student->id)->whereIn('user_id', $facultyIds)
+                    ->when($selectedSubjectId, fn ($q) => $q->where('subject_id', $selectedSubjectId))
+                    ->when(is_string($selectedSection) && $selectedSection !== '', function ($q) use ($selectedSection) {
+                        if (strcasecmp($selectedSection, 'Unassigned') === 0) {
+                            $q->where(function ($subq) {
+                                $subq->whereNull('section')->orWhere('section', '');
+                            });
+                        } else {
+                            $q->where('section', $selectedSection);
+                        }
+                    })
+                    ->get();
                 $gradeCount = 0; $gradeSum = 0;
                 foreach ($records as $r) {
                     if ($r->grade_point !== null) { $gradeSum += $r->grade_point; $gradeCount++; }
@@ -281,10 +352,32 @@ class DashboardController extends Controller
             ->withCount(['subjects', 'records'])
             ->get();
 
-        $facultyReports = GeneratedReport::whereIn('user_id', $facultyIds)
+        $facultyReports = GeneratedReport::where('recipient_id', $user->id)
+            ->whereNotNull('submitted_at')
             ->with('user')
             ->orderBy('created_at', 'desc')
             ->get();
+
+        $filterSubjects = Subject::whereIn('user_id', $facultyIds)
+            ->where('status', 'active')
+            ->orderBy('code')
+            ->get(['id', 'code', 'name']);
+
+        $sectionsQuery = Record::whereIn('user_id', $facultyIds);
+        if ($selectedSubjectId) {
+            $sectionsQuery->where('subject_id', $selectedSubjectId);
+        }
+        $filterSections = $sectionsQuery
+            ->select('section')
+            ->distinct()
+            ->pluck('section')
+            ->map(function ($s) {
+                $s = is_string($s) ? trim($s) : '';
+                return $s === '' ? 'Unassigned' : $s;
+            })
+            ->unique()
+            ->sort()
+            ->values();
 
         return view('dashboard.program-head', [
             'totalFaculty' => $totalFaculty, 'pendingReviews' => 0, 'totalRecords' => $totalRecords,
@@ -299,6 +392,10 @@ class DashboardController extends Controller
             'totalPass' => $totalPass,
             'totalFail' => $totalFail,
             'facultyReports' => $facultyReports,
+            'filterSubjects' => $filterSubjects,
+            'filterSections' => $filterSections,
+            'selectedSubjectId' => $selectedSubjectId,
+            'selectedSection' => $selectedSection,
         ]);
     }
 
@@ -307,19 +404,9 @@ class DashboardController extends Controller
     {
         $user = Auth::user();
         
-        // Get all faculty in the same department as the program head
-        $facultyIds = User::where('role', 'faculty')
-            ->when($user->department, function ($q) use ($user) {
-                $dept = trim($user->department);
-                $q->where(function ($sub) use ($dept) {
-                    $sub->whereRaw('LOWER(department) = ?', [strtolower($dept)])
-                        ->orWhere('department', 'like', $dept . '%');
-                });
-            })
-            ->pluck('id');
-
-        // Get all reports submitted by their department faculty
-        $facultyReports = GeneratedReport::whereIn('user_id', $facultyIds)
+        // Show only reports explicitly submitted to this program head account.
+        $facultyReports = GeneratedReport::where('recipient_id', $user->id)
+            ->whereNotNull('submitted_at')
             ->with('user')
             ->orderByDesc('created_at')
             ->get();
@@ -941,24 +1028,11 @@ class DashboardController extends Controller
     {
         $user = Auth::user();
         
-        // Allow faculty to view their own reports, program heads to view reports from their faculty, and dean to view everything
+        // Strict access: owner or explicit recipient only.
         $isOwner = $report->user_id === $user->id;
         $isRecipient = $user->role !== 'faculty' && $report->recipient_id === $user->id && $report->submitted_at !== null;
-        $isDean = $user->role === 'dean';
-        
-        // Check if program head can view report from their department faculty
-        $isProgramHeadCanView = false;
-        if ($user->role === 'program_head') {
-            $reportOwner = User::find($report->user_id);
-            if ($reportOwner && $reportOwner->role === 'faculty') {
-                $dept = trim($user->department);
-                $reportDept = trim($reportOwner->department ?? '');
-                $isProgramHeadCanView = strtolower($dept) === strtolower($reportDept) || 
-                                       strpos($reportDept, $dept) === 0;
-            }
-        }
-        
-        if (!$isOwner && !$isRecipient && !$isDean && !$isProgramHeadCanView) {
+
+        if (!$isOwner && !$isRecipient) {
             abort(403);
         }
 
@@ -986,6 +1060,11 @@ class DashboardController extends Controller
         $request->validate([
             'recipient_id' => 'required|exists:users,id',
         ]);
+
+        $recipient = User::findOrFail($request->recipient_id);
+        if (!in_array($recipient->role, ['program_head', 'dean'], true)) {
+            return redirect()->route('faculty.reports')->with('error', 'Invalid recipient selected.');
+        }
 
         $report->update([
             'recipient_id' => $request->recipient_id,
