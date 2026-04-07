@@ -595,40 +595,4 @@
         }
     </script>
 
-    <!-- Submitted Requirements -->
-    <div class="section" style="margin-top: 30px; margin-bottom: 50px;">
-        <div class="section-header">
-            <h3 class="section-title">Submitted Requirements</h3>
-        </div>
-        <div style="overflow-x: auto;">
-            <table style="width: 100%; border-collapse: collapse;">
-                <thead>
-                    <tr style="background-color: #f8fafc; border-bottom: 2px solid #edf2f7;">
-                        <th style="padding: 12px 16px; text-align: left; font-size: 11px; font-weight: 700; color: #1e3c72; text-transform: uppercase;">Requirement Name</th>
-                        <th style="padding: 12px 16px; text-align: left; font-size: 11px; font-weight: 700; color: #1e3c72; text-transform: uppercase;">Submission Date</th>
-                        <th style="padding: 12px 16px; text-align: left; font-size: 11px; font-weight: 700; color: #1e3c72; text-transform: uppercase;">Status</th>
-                        <th style="padding: 12px 16px; text-align: left; font-size: 11px; font-weight: 700; color: #1e3c72; text-transform: uppercase;">Actions</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    @forelse($facultyReports->take(5) as $report)
-                        <tr style="border-bottom: 1px solid #edf2f7;">
-                            <td style="padding: 16px; font-size: 14px; font-weight: 600; color: #1e3c72;">{{ $report->title }}</td>
-                            <td style="padding: 16px; font-size: 13px; color: #64748b;">{{ $report->created_at->format('M d, Y') }}</td>
-                            <td style="padding: 16px;">
-                                <span style="background: #ecfdf5; color: #059669; padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: 700; display: inline-block;">Submitted</span>
-                            </td>
-                            <td style="padding: 16px;">
-                                <a href="{{ route('faculty.reports.view', $report->id) }}" style="color: #1e3c72; font-size: 13px; font-weight: 600; text-decoration: none;">View</a>
-                            </td>
-                        </tr>
-                    @empty
-                        <tr>
-                            <td colspan="4" style="padding: 30px; text-align: center; color: #94a3b8; font-size: 14px;">No submitted requirements found.</td>
-                        </tr>
-                    @endforelse
-                </tbody>
-            </table>
-        </div>
-    </div>
 @endsection

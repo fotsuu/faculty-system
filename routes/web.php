@@ -132,6 +132,7 @@ Route::middleware('auth')->prefix('faculty')->name('faculty.')->group(function (
     Route::get('/reports/{report}/download', [DashboardController::class, 'downloadReport'])->name('reports.download');
     Route::get('/reports/{report}/view', [DashboardController::class, 'viewReport'])->name('reports.view');
     Route::post('/reports/{report}/submit', [DashboardController::class, 'submitReport'])->name('reports.submit');
+    Route::delete('/reports/{report}', [DashboardController::class, 'deleteReport'])->name('reports.delete');
     Route::get('/submitted-reports', [DashboardController::class, 'submittedReports'])->name('submitted-reports');
     Route::post('/analytics/generate', [DashboardController::class, 'generateAnalytics'])->name('analytics.generate');
 

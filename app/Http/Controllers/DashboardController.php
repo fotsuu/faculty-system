@@ -995,6 +995,17 @@ class DashboardController extends Controller
         return redirect()->route('faculty.reports')->with('success', 'Report submitted successfully.');
     }
 
+    public function deleteReport(GeneratedReport $report)
+    {
+        if ($report->user_id !== Auth::id()) {
+            abort(403);
+        }
+
+        $report->delete();
+
+        return redirect()->route('faculty.reports')->with('success', 'Generated report deleted successfully.');
+    }
+
     public function settings()
     {
         return view('faculty.settings', [

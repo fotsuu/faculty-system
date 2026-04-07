@@ -75,6 +75,7 @@
                                     @else
                                         <button type="button" onclick="openSubmitModal({{ $report->id }})" style="background: #1e3c72; color: white; border: none; padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer;">Submit</button>
                                     @endif
+                                    <button type="button" onclick="openDeleteModal({{ $report->id }}, '{{ addslashes($report->title) }}')" style="background: #fee2e2; color: #b91c1c; border: none; padding: 6px 12px; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer;">Delete</button>
                                 </div>
                             </td>
                         </tr>
@@ -144,6 +145,30 @@
             <iframe id="reportIframe" src="about:blank" style="width: 100%; height: 100%; border: none;" sandbox="allow-same-origin allow-scripts allow-popups allow-forms"></iframe>
         </div>
     </div>
+
+    <!-- Delete Confirmation Modal -->
+    <div id="deleteReportModal" style="display: none; position: fixed; inset: 0; z-index: 4500; background: rgba(15, 23, 42, 0.75); align-items: center; justify-content: center; padding: 20px;">
+        <div style="background: white; border-radius: 16px; max-width: 500px; width: 100%; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1); overflow: hidden;">
+            <div style="padding: 20px 24px; border-bottom: 1px solid #e2e8f0; display: flex; justify-content: space-between; align-items: center; background: #f8fafc;">
+                <div>
+                    <h3 style="font-size: 18px; font-weight: 700; color: #b91c1c; margin: 0;">Delete Generated Report</h3>
+                    <p id="deleteReportTitle" style="margin: 4px 0 0; color: #475569; font-size: 14px;"></p>
+                </div>
+                <button type="button" onclick="closeDeleteModal()" style="background: none; border: none; font-size: 20px; cursor: pointer; color: #94a3b8;">✕</button>
+            </div>
+            <div style="padding: 24px;">
+                <p style="font-size: 14px; color: #475569; margin-bottom: 16px;">This will delete the generated report permanently. This action cannot be undone.</p>
+                <form id="deleteReportForm" method="POST">
+                    @csrf
+                    @method('DELETE')
+                    <div style="display: flex; justify-content: flex-end; gap: 12px;">
+                        <button type="button" onclick="closeDeleteModal()" style="padding: 10px 20px; background: white; border: 1px solid #e2e8f0; border-radius: 8px; font-weight: 600; color: #64748b; cursor: pointer;">Cancel</button>
+                        <button type="submit" style="padding: 10px 20px; background: #b91c1c; border: none; border-radius: 8px; font-weight: 600; color: white; cursor: pointer;">Delete Report</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
 @endsection
 
 @section('scripts')
@@ -170,6 +195,23 @@
             const modal = document.getElementById('viewReportModal');
             const frame = document.getElementById('reportIframe');
             frame.src = 'about:blank';
+            modal.style.display = 'none';
+        }
+
+        function openDeleteModal(reportId, reportTitle) {
+            const modal = document.getElementById('deleteReportModal');
+            const titleElement = document.getElementById('deleteReportTitle');
+            const form = document.getElementById('deleteReportForm');
+
+            titleElement.textContent = reportTitle;
+            form.action = `/faculty/reports/${reportId}`;
+            modal.style.display = 'flex';
+        }
+
+        function closeDeleteModal() {
+            const modal = document.getElementById('deleteReportModal');
+            const form = document.getElementById('deleteReportForm');
+            form.action = '';
             modal.style.display = 'none';
         }
 

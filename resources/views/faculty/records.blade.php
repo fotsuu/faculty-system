@@ -15,12 +15,6 @@
             <div style="flex: 1;">
                 <label style="display: block; font-size: 13px; font-weight: 600; color: #334155; margin-bottom: 8px;">Select Class Record File</label>
                 <input type="file" name="file" id="fileInput" required style="width: 100%; padding: 8px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 14px; background: #f8fafc;">
-                <div id="uploadStatus" style="display: none; margin-top: 8px; font-size: 12px; color: #059669; display: flex; align-items: center; gap: 6px;">
-                    <svg xmlns="http://www.w3.org/2000/svg" style="width: 16px; height: 16px; animation: spin 1s linear infinite;" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                    </svg>
-                    <span id="uploadMessage">Processing file...</span>
-                </div>
             </div>
         </form>
 
@@ -267,8 +261,6 @@
         const fileInput = document.getElementById('fileInput');
         const uploadForm = document.getElementById('uploadForm');
         const unsupportedFileModal = document.getElementById('unsupportedFileModal');
-        const uploadStatus = document.getElementById('uploadStatus');
-        const uploadMessage = document.getElementById('uploadMessage');
         
         const supportedExtensions = ['csv', 'xls', 'xlsx'];
         
@@ -280,11 +272,8 @@
                 if (!supportedExtensions.includes(fileExtension)) {
                     unsupportedFileModal.style.display = 'flex';
                     this.value = ''; // Clear the file input
-                    uploadStatus.style.display = 'none';
                 } else {
-                    // Valid file - show loading status and auto-submit
-                    uploadStatus.style.display = 'flex';
-                    uploadMessage.textContent = `Loading ${fileName}...`;
+                    // Valid file - auto-submit
                     setTimeout(() => {
                         uploadForm.submit();
                     }, 300); // Small delay for UX feedback
@@ -296,7 +285,6 @@
             if (fileInput.files.length === 0) {
                 e.preventDefault();
                 unsupportedFileModal.style.display = 'flex';
-                uploadStatus.style.display = 'none';
             }
         });
     </script>
