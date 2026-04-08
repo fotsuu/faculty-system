@@ -14,15 +14,26 @@ class TargetUsersSeeder extends Seeder
     public function run(): void
     {
         // Default credentials:
-        // nel.panaligan@dssc.edu.ph   | nel12345
+        // nel@dssc.edu.ph             | 12345678
         // rhea.perito@dssc.edu.ph     | rhea12345
         // felomino.alba@dssc.edu.ph   | felomino123
+
+        if (User::where('email', 'nel@dssc.edu.ph')->doesntExist()) {
+            User::where('email', 'nel.panaligan@dssc.edu.ph')->update([
+                'name' => 'Nel Panaligan',
+                'email' => 'nel@dssc.edu.ph',
+                'password' => Hash::make('12345678'),
+                'role' => 'program_head',
+                'department' => 'BSIT',
+                'status' => 'active',
+            ]);
+        }
 
         $users = [
             [
                 'name' => 'Nel Panaligan',
-                'email' => 'nel.panaligan@dssc.edu.ph',
-                'password' => Hash::make('nel12345'),
+                'email' => 'nel@dssc.edu.ph',
+                'password' => Hash::make('12345678'),
                 'role' => 'program_head',
                 'department' => 'BSIT',
                 'status' => 'active',
