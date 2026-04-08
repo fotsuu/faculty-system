@@ -201,6 +201,32 @@
             </div>
         </div>
 
+        @if(!empty($allowDevDbReset) && $allowDevDbReset)
+        <div class="section" style="border: 2px dashed #dc3545; background: #fff8f8; margin-bottom: 24px;">
+            <div class="section-header" style="border-bottom-color: #f1c9cf;">
+                <h3 class="section-title" style="color: #b02a37;">Temporary: clear database &amp; seed</h3>
+            </div>
+            <p style="font-size: 13px; color: #64748b; margin-bottom: 12px;">
+                Kini mo- gawas ang tanang data sa mga application tables (users, students, subjects, records, reports, grades, jobs, sessions, cache) unya mo-run ang <code style="background:#f1f5f9;padding:2px 6px;border-radius:4px;">php artisan db:seed</code>.
+                Makalogout ka ug kinahanglan mo-login balik.
+            </p>
+            <form action="{{ route('dean.dev-reset-database') }}" method="POST" onsubmit="return confirm('Sigurado ka? Ma-delete ang tanang data sa database ug ma-seed balik.');">
+                @csrf
+                <label for="dev-reset-confirm" style="display:block;font-size:12px;font-weight:600;color:#334155;margin-bottom:6px;">Type <strong>RESET</strong> aron ma-confirm:</label>
+                <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:center;">
+                    <input id="dev-reset-confirm" name="confirm" type="text" autocomplete="off" placeholder="RESET" required
+                        style="padding:10px 12px;border:1px solid #cbd5e1;border-radius:8px;min-width:200px;font-size:14px;" />
+                    <button type="submit" style="background:#dc3545;color:#fff;border:none;padding:10px 18px;border-radius:8px;font-weight:700;cursor:pointer;font-size:13px;">
+                        Clear tables &amp; seed
+                    </button>
+                </div>
+                @error('confirm')
+                    <p style="color:#dc3545;font-size:12px;margin-top:8px;">{{ $message }}</p>
+                @enderror
+            </form>
+        </div>
+        @endif
+
         @include('dashboard.partials.institutional-analytics')
 
         <!-- Recent Submissions Table -->
