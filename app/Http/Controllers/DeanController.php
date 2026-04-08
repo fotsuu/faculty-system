@@ -7,10 +7,7 @@ use App\Models\Student;
 use App\Models\Subject;
 use App\Models\User;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 
 class DeanController extends Controller
 {
@@ -230,75 +227,7 @@ class DeanController extends Controller
             'selectedSubjectId' => $selectedSubjectId,
             'selectedSection' => $selectedSection,
             'subjectSectionOptions' => $subjectSectionOptions,
-            'allowDevDbReset' => $this->devDbResetIsAllowed(),
         ]);
-    }
-
-    /**
-     * Temporary: truncate application tables and run DatabaseSeeder.
-     * Enabled only in local, or when ALLOW_DEAN_DB_RESET=true in .env.
-     */
-    public function devResetDatabase(Request $request)
-    {
-        if (Auth::user()->role !== 'dean' || ! $this->devDbResetIsAllowed()) {
-            abort(404);
-        }
-
-        $request->validate([
-            'confirm' => ['required', 'string', 'in:RESET'],
-        ], [
-            'confirm.in' => 'Type RESET exactly to confirm.',
-        ]);
-
-        $tables = [
-            'student_grade_summaries',
-            'student_final_exams',
-            'student_midterm_exams',
-            'student_attendance',
-            'student_quizzes',
-            'generated_reports',
-            'records',
-            'subjects',
-            'students',
-            'sessions',
-            'password_reset_tokens',
-            'cache',
-            'cache_locks',
-            'job_batches',
-            'failed_jobs',
-            'jobs',
-            'users',
-        ];
-
-        Schema::disableForeignKeyConstraints();
-        try {
-            foreach ($tables as $table) {
-                if (Schema::hasTable($table)) {
-                    DB::table($table)->truncate();
-                }
-            }
-        } finally {
-            Schema::enableForeignKeyConstraints();
-        }
-
-        Artisan::call('db:seed', ['--force' => true]);
-
-        Auth::logout();
-        $request->session()->invalidate();
-        $request->session()->regenerateToken();
-
-        return redirect()
-            ->route('login')
-            ->with('success', 'Database gi-clear ug gi-seed na. Palogin balik gamit ang default accounts.');
-    }
-
-    private function devDbResetIsAllowed(): bool
-    {
-        if (app()->environment('local')) {
-            return true;
-        }
-
-        return filter_var(env('ALLOW_DEAN_DB_RESET', false), FILTER_VALIDATE_BOOLEAN);
     }
 
     public function exportAllData()

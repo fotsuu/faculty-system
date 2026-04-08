@@ -92,7 +92,6 @@ Route::middleware('auth')->prefix('dean')->name('dean.')->group(function () {
     Route::post('/submission/{userId}/{subjectId}/approve', [DeanController::class, 'approveSubmission'])->name('submission.approve');
     Route::post('/submission/{userId}/{subjectId}/reject', [DeanController::class, 'rejectSubmission'])->name('submission.reject');
     Route::post('/faculty/{id}/toggle-status', [DeanController::class, 'toggleFacultyStatus'])->name('faculty.toggle-status');
-    Route::post('/dev-reset-database', [DeanController::class, 'devResetDatabase'])->name('dev-reset-database');
 });
 
 // Program Head Routes Group
