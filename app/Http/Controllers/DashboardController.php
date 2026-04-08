@@ -12,6 +12,7 @@ use App\Models\StudentFinalExam;
 use App\Models\StudentGradeSummary;
 use App\Models\Subject;
 use App\Models\User;
+use App\Support\ClassRecordColumnOrder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -586,16 +587,7 @@ class DashboardController extends Controller
             }
         }
 
-        // Keep student name as the first column for consistent display across environments.
-        $nameHeader = $scoreKeys->first(function ($key) {
-            $normalized = strtolower(trim((string) $key));
-            return in_array($normalized, ['name of student', 'student name', 'name', 'full name'], true);
-        });
-        if ($nameHeader !== null) {
-            $scoreKeys = collect([$nameHeader])
-                ->merge($scoreKeys->reject(fn ($key) => $key === $nameHeader))
-                ->values();
-        }
+        $scoreKeys = ClassRecordColumnOrder::reorderScoreKeys($scoreKeys);
 
         $excelBySection = null;
         if ($scoreKeys->isNotEmpty()) {
@@ -936,7 +928,7 @@ class DashboardController extends Controller
         });
 
         // If Excel preview was uploaded and is still in session, show that data instead
-        $excelPreviewData = session('excel_preview_data');
+        $excelPreviewData = session('excel_preview_data') ?? [];
         $excelBySection = null;
 
         $headers = [];
@@ -956,6 +948,14 @@ class DashboardController extends Controller
         } elseif (!empty($excelPreviewData['rows']) && !empty($excelPreviewData['headers'])) {
             $headers = $excelPreviewData['headers'];
             $bodyRows = $excelPreviewData['rows'];
+        }
+
+        if (!empty($headers) && !empty($bodyRows)) {
+            $reordered = ClassRecordColumnOrder::reorderTabularHeadersAndRows($headers, $bodyRows);
+            $headers = $reordered['headers'];
+            $bodyRows = $reordered['rows'];
+            $excelPreviewData['headers'] = $headers;
+            $excelPreviewData['rows'] = $bodyRows;
         }
 
         if (!empty($headers) && !empty($bodyRows)) {
@@ -999,6 +999,8 @@ class DashboardController extends Controller
                     }
                 }
             }
+
+            $scoreKeys = ClassRecordColumnOrder::reorderScoreKeys($scoreKeys);
 
             if ($scoreKeys->isNotEmpty()) {
                 $excelPreviewData = [

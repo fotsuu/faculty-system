@@ -6,6 +6,7 @@ use App\Models\Record;
 use App\Models\Student;
 use App\Models\Subject;
 use App\Models\User;
+use App\Support\ClassRecordColumnOrder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
@@ -346,16 +347,7 @@ class DeanController extends Controller
             }
         }
 
-        // Keep student name as the first column for consistent display across environments.
-        $nameHeader = $scoreKeys->first(function ($key) {
-            $normalized = strtolower(trim((string) $key));
-            return in_array($normalized, ['name of student', 'student name', 'name', 'full name'], true);
-        });
-        if ($nameHeader !== null) {
-            $scoreKeys = collect([$nameHeader])
-                ->merge($scoreKeys->reject(fn ($key) => $key === $nameHeader))
-                ->values();
-        }
+        $scoreKeys = ClassRecordColumnOrder::reorderScoreKeys($scoreKeys);
 
         $excelBySection = null;
         if ($scoreKeys->isNotEmpty()) {
