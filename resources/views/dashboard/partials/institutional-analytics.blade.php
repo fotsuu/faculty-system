@@ -109,7 +109,7 @@
                     <div class="performer-rank">#{{ $index + 1 }}</div>
                     <div class="performer-info">
                         <div class="performer-name">{{ $performer['name'] }}</div>
-                        <div class="performer-id">{{ $performer['student_id'] }} • {{ $performer['program'] ?? ($performer['subjects'] ?? 'N/A') }}</div>
+                        <div class="performer-id">{{ $performer['program'] ?? ($performer['subjects'] ?? 'N/A') }}</div>
                     </div>
                     <div style="text-align: right;">
                         <div class="performer-gpa">{{ $performer['gpa'] }}</div>
