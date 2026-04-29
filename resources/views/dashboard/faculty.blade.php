@@ -222,7 +222,15 @@
                     <h3 class="section-title" style="font-size: 18px; font-weight: 700; color: #1e3c72;">🏆 Ranking of Top Performing Students</h3>
                     <div class="section-subtitle" style="font-size: 13px; color: #999; margin-top: 4px;">Based on cumulative GPA this semester</div>
                 </div>
-                <a href="{{ route('faculty.students') }}" style="font-size: 12px; color: #1e3c72; text-decoration: none; font-weight: 600;">View All →</a>
+                @php
+                    $studentListQueryParams = array_filter([
+                        'subject_id' => $selectedSubjectId ?? null,
+                        'section' => $selectedSection ?? null,
+                    ], function ($v) {
+                        return !is_null($v) && $v !== '';
+                    });
+                @endphp
+                <a href="{{ route('faculty.students', $studentListQueryParams) }}" style="font-size: 12px; color: #1e3c72; text-decoration: none; font-weight: 600;">View All →</a>
             </div>
             <ul style="list-style: none; padding: 0; margin-bottom: 16px;">
                 @forelse($topStudents as $index => $performer)

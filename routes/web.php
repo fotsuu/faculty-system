@@ -26,6 +26,18 @@ Route::post('/login', function (Request $request) {
 
     if (Auth::attempt($credentials, $request->filled('remember'))) {
         $request->session()->regenerate();
+
+        $user = Auth::user();
+        if ($user && $user->role === 'faculty' && $user->status !== 'active') {
+            Auth::logout();
+            $request->session()->invalidate();
+            $request->session()->regenerateToken();
+
+            return back()->withErrors([
+                'email' => 'Your faculty account is awaiting dean approval.',
+            ])->onlyInput('email');
+        }
+
         return redirect()->intended(route('dashboard'));
     }
 
@@ -52,12 +64,10 @@ Route::post('/register', function (Request $request) {
         'password' => Hash::make($data['password']),
         'role' => 'faculty',
         'department' => $data['program'],
-        'status' => 'active',
+        'status' => 'pending',
     ]);
 
-    Auth::login($user);
-
-    return redirect()->route('dashboard');
+    return redirect()->route('login')->with('success', 'Registration submitted. Please wait for dean approval before signing in.');
 
 })->name('register.post');
 
@@ -71,7 +81,7 @@ Route::get('/dashboard', function () {
     }
     // For faculty users, use the controller to get dynamic data
     return app(DashboardController::class)->facultyDashboard();
-})->middleware('auth')->name('dashboard');
+})->middleware(['auth', 'check.approval'])->name('dashboard');
 
 // Logout
 Route::post('/logout', function (Request $request) {
@@ -106,7 +116,7 @@ Route::middleware('auth')->prefix('program-head')->name('program-head.')->group(
 });
 
 // Faculty Routes Group
-Route::middleware('auth')->prefix('faculty')->name('faculty.')->group(function () {
+Route::middleware(['auth', 'check.approval'])->prefix('faculty')->name('faculty.')->group(function () {
     Route::get('/dashboard', [DashboardController::class, 'facultyDashboard'])->name('dashboard');
 
     Route::get('/students', [DashboardController::class, 'students'])->name('students');

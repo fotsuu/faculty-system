@@ -333,6 +333,9 @@
         <!-- Right Section -->
         <div class="right-section">
             <h2>Faculty Registration</h2>
+            <div style="margin-bottom: 14px; padding: 10px 12px; border-radius: 4px; border: 1px solid #bfdbfe; background: #eff6ff; color: #1e3a8a; font-size: 12px;">
+                Registration requires dean approval. You can sign in only after your account is approved.
+            </div>
             
             @if ($errors->any())
                 <div class="error-message" style="display: block; margin-bottom: 20px; padding: 12px 16px; background-color: #f8d7da; border: 1px solid #f5c6cb; border-radius: 4px; color: #721c24;">

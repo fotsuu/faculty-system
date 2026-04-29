@@ -37,9 +37,24 @@ class DashboardController extends Controller
             ->count('file_name');
 
         // Total unique students across all uploaded class record files
-        $totalStudents = Record::where('user_id', $user->id)
-            ->distinct('student_id')
-            ->count('student_id');
+        $totalStudentsQuery = Record::where('user_id', $user->id)
+            ->distinct('student_id');
+        
+        if ($selectedSubjectId) {
+            $totalStudentsQuery->where('subject_id', $selectedSubjectId);
+        }
+
+        if (is_string($selectedSection) && $selectedSection !== '') {
+            if (strcasecmp($selectedSection, 'Unassigned') === 0) {
+                $totalStudentsQuery->where(function ($q) {
+                    $q->whereNull('section')->orWhere('section', '');
+                });
+            } else {
+                $totalStudentsQuery->where('section', $selectedSection);
+            }
+        }
+        
+        $totalStudents = $totalStudentsQuery->count('student_id');
 
         // Total subjects as number of uploaded class record files (as requested)
         $activeSubjects = $totalRecords;
@@ -254,6 +269,7 @@ class DashboardController extends Controller
 
         $emptyPayload = [
             'totalFaculty' => 0,
+            'totalStudents' => 0,
             'pendingReviews' => 0,
             'totalRecords' => 0,
             'recordsGrowthPercent' => 0,
@@ -324,6 +340,7 @@ class DashboardController extends Controller
                 }
             })
             ->get();
+        $totalStudents = $allRecords->unique('student_id')->count();
         $totalPass = collect($passFailRates)->sum('pass');
         $totalFail = collect($passFailRates)->sum('fail');
         $passRatePercent = collect($passFailRates)->isNotEmpty() ? (int) round(($totalPass / collect($passFailRates)->sum('total')) * 100) : 0;
@@ -463,7 +480,7 @@ class DashboardController extends Controller
         }
 
         return view('dashboard.program-head', [
-            'totalFaculty' => $totalFaculty, 'pendingReviews' => 0, 'totalRecords' => $totalRecords,
+            'totalFaculty' => $totalFaculty, 'totalStudents' => $totalStudents, 'pendingReviews' => 0, 'totalRecords' => $totalRecords,
             'recordsGrowthPercent' => $recordsGrowthPercent, 'passRatePercent' => $passRatePercent,
             'subjects' => $subjects, 'submissions' => $submissions, 
             'passFailRates' => $passFailRates,
@@ -631,14 +648,51 @@ class DashboardController extends Controller
     public function students()
     {
         $user = Auth::user();
-        $totalUniqueStudents = Record::where('user_id', $user->id)
-            ->distinct('student_id')
-            ->count('student_id');
+        
+        $selectedSubjectId = request()->query('subject_id');
+        $selectedSubjectId = is_numeric($selectedSubjectId) ? (int) $selectedSubjectId : null;
+        $selectedSection = request()->query('section');
+        $selectedSection = is_string($selectedSection) ? trim($selectedSection) : null;
+        if ($selectedSection === '') $selectedSection = null;
+
+        $totalUniqueStudentsQuery = Record::where('user_id', $user->id)
+            ->distinct('student_id');
+
+        if ($selectedSubjectId) {
+            $totalUniqueStudentsQuery->where('subject_id', $selectedSubjectId);
+        }
+
+        if (is_string($selectedSection) && $selectedSection !== '') {
+            if (strcasecmp($selectedSection, 'Unassigned') === 0) {
+                $totalUniqueStudentsQuery->where(function ($q) {
+                    $q->whereNull('section')->orWhere('section', '');
+                });
+            } else {
+                $totalUniqueStudentsQuery->where('section', $selectedSection);
+            }
+        }
+
+        $totalUniqueStudents = $totalUniqueStudentsQuery->count('student_id');
 
         // Group students per subject + section so the faculty view matches the separation model.
-        $records = Record::where('user_id', $user->id)
-            ->with(['student', 'subject'])
-            ->get();
+        $recordsQuery = Record::where('user_id', $user->id)
+            ->with(['student', 'subject']);
+
+        if ($selectedSubjectId) {
+            $recordsQuery->where('subject_id', $selectedSubjectId);
+        }
+
+        if (is_string($selectedSection) && $selectedSection !== '') {
+            if (strcasecmp($selectedSection, 'Unassigned') === 0) {
+                $recordsQuery->where(function ($q) {
+                    $q->whereNull('section')->orWhere('section', '');
+                });
+            } else {
+                $recordsQuery->where('section', $selectedSection);
+            }
+        }
+
+        $records = $recordsQuery->get();
 
         $grouped = []; // key => ['subject'=>..., 'section'=>..., 'students'=>[student_id=>...]]
 

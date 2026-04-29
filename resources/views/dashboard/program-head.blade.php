@@ -156,15 +156,10 @@
                 <div style="font-size: 28px; font-weight: 800; color: #1e3c72; margin-bottom: 8px;">{{ $passRatePercent }}%</div>
                 <div style="font-size: 12px; font-weight: 600; color: #28a745;">Across all subjects</div>
             </div>
-            <div style="background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05); display: flex; flex-direction: column; border-left: 4px solid #1e3c72; cursor: pointer; text-decoration: none; transition: transform 0.2s;" onclick="location.href='{{ route('program-head.class-records') }}'" onmouseover="this.style.transform='translateY(-4px)'" onmouseout="this.style.transform='none'">
-                <div style="font-size: 11px; font-weight: 700; color: #999; letter-spacing: 0.5px; margin-bottom: 12px; text-transform: uppercase;">Active Subjects</div>
-                <div style="font-size: 28px; font-weight: 800; color: #1e3c72; margin-bottom: 8px;">{{ $subjects->count() }}</div>
-                <div style="font-size: 12px; font-weight: 700; color: #1e3c72; display: flex; align-items: center; gap: 4px;">
-                    View All Class Records 
-                    <svg xmlns="http://www.w3.org/2000/svg" style="width: 14px; height: 14px;" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3" />
-                    </svg>
-                </div>
+            <div style="background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05); display: flex; flex-direction: column; border-left: 4px solid #1e3c72;">
+                <div style="font-size: 11px; font-weight: 700; color: #999; letter-spacing: 0.5px; margin-bottom: 12px; text-transform: uppercase;">Total Students</div>
+                <div style="font-size: 28px; font-weight: 800; color: #1e3c72; margin-bottom: 8px;">{{ number_format($totalStudents ?? 0) }}</div>
+                <div style="font-size: 12px; font-weight: 600; color: #28a745;">Based on current filter</div>
             </div>
         </div>
 

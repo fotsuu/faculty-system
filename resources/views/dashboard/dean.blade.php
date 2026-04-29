@@ -195,9 +195,9 @@
                 <div class="stat-card-change text-success">Global Academic Performance</div>
             </div>
             <div class="stat-card">
-                <div class="stat-card-title">Active Subjects</div>
-                <div class="stat-card-value">{{ $subjects->count() }}</div>
-                <div class="stat-card-change text-success">Currently Monitored</div>
+                <div class="stat-card-title">Total Students</div>
+                <div class="stat-card-value">{{ number_format($totalStudents ?? 0) }}</div>
+                <div class="stat-card-change text-success">Based on current filter</div>
             </div>
         </div>
 
@@ -263,6 +263,7 @@
                             <th>Name</th>
                             <th>Email</th>
                             <th>Program</th>
+                            <th>Account Status</th>
                             <th>Active Subjects</th>
                             <th>Total Records</th>
                             <th>Actions</th>
@@ -274,6 +275,11 @@
                                 <td class="faculty-name">{{ $f->name }}</td>
                                 <td>{{ $f->email }}</td>
                                 <td>{{ $f->department ?? 'N/A' }}</td>
+                                <td>
+                                    <span style="text-transform: capitalize; background: {{ $f->status === 'active' ? '#ecfdf5' : ($f->status === 'pending' ? '#fef3c7' : '#fee2e2') }}; color: {{ $f->status === 'active' ? '#059669' : ($f->status === 'pending' ? '#92400e' : '#dc2626') }}; padding: 4px 10px; border-radius: 999px; font-size: 11px; font-weight: 700;">
+                                        {{ $f->status ?? 'pending' }}
+                                    </span>
+                                </td>
                                 <td>{{ $f->subjects_count }}</td>
                                 <td>{{ number_format($f->records_count) }}</td>
                                 <td>
@@ -282,7 +288,7 @@
                                         <form action="{{ route('dean.faculty.toggle-status', $f->id) }}" method="POST" style="display: inline;">
                                             @csrf
                                             <button type="submit" class="btn" style="background: {{ $f->status === 'active' ? '#fee2e2' : '#ecfdf5' }}; color: {{ $f->status === 'active' ? '#dc3545' : '#059669' }}; padding:6px 12px; font-size:12px; font-weight: 600; border: none; border-radius: 4px; cursor: pointer;">
-                                                {{ $f->status === 'active' ? 'Deactivate' : 'Activate' }}
+                                                {{ $f->status === 'active' ? 'Deactivate' : ($f->status === 'pending' ? 'Approve Account' : 'Activate') }}
                                             </button>
                                         </form>
                                     </div>

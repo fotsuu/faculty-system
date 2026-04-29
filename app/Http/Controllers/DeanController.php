@@ -33,8 +33,22 @@ class DeanController extends Controller
             $analyticsFacultyIds = $facultyIds;
         }
         
-        // Get total students across all faculty subjects
-        $totalStudents = Student::whereIn('id', Record::whereIn('user_id', $analyticsFacultyIds)->distinct('student_id')->pluck('student_id'))->count();
+        // Get total students across filtered faculty records
+        $totalStudentsQuery = Record::whereIn('user_id', $analyticsFacultyIds)
+            ->whereNotNull('file_name')
+            ->when($selectedSubjectId, fn ($q) => $q->where('subject_id', $selectedSubjectId))
+            ->when(is_string($selectedSection) && $selectedSection !== '', function ($q) use ($selectedSection) {
+                if (strcasecmp($selectedSection, 'Unassigned') === 0) {
+                    $q->where(function ($subq) {
+                        $subq->whereNull('section')->orWhere('section', '');
+                    });
+                } else {
+                    $q->where('section', $selectedSection);
+                }
+            });
+        $totalStudents = (clone $totalStudentsQuery)
+            ->distinct('student_id')
+            ->count('student_id');
         
         // Get total records from faculty users
         $totalRecords = Record::whereIn('user_id', $analyticsFacultyIds)
@@ -428,7 +442,11 @@ class DeanController extends Controller
         $user->status = $user->status === 'active' ? 'inactive' : 'active';
         $user->save();
 
-        return back()->with('success', 'Faculty status updated successfully!');
+        $message = $user->status === 'active'
+            ? 'Faculty account approved and activated successfully!'
+            : 'Faculty account access has been disabled.';
+
+        return back()->with('success', $message);
     }
     
     public function approveSubmission(Request $request, $userId, $subjectId)
