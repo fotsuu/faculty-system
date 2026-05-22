@@ -89,11 +89,18 @@
                                             @foreach(range(0, count($excelPreviewData['headers']) - 1) as $idx)
                                                 @php
                                                     $value = $row[$idx] ?? '';
-                                                    if (is_numeric($value) && strpos($value, '.') !== false) {
-                                                        $value = number_format((float)$value, 2, '.', '');
+                                                    if (is_array($value) || is_object($value)) {
+                                                        $value = json_encode($value);
+                                                    }
+
+                                                    $isNumeric = is_numeric($value) && $value !== '';
+                                                    if ($isNumeric) {
+                                                        $display = number_format((float)$value, 2, '.', '');
+                                                    } else {
+                                                        $display = (string)$value;
                                                     }
                                                 @endphp
-                                                <td style="padding: 12px; color: #334155; white-space: nowrap;">{{ $value }}</td>
+                                                <td style="padding: 12px; color: #334155; {{ $isNumeric ? 'text-align: center; font-weight:700; white-space: nowrap;' : 'text-align: left;' }}">{{ $display }}</td>
                                             @endforeach
                                         </tr>
                                     @endforeach
@@ -137,11 +144,17 @@
                             <table class="recordsTable" style="width: 100%; border-collapse: collapse; font-size: 13px; table-layout: auto;">
                                 <thead style="position: sticky; top: 0; z-index: 10;">
                                     <tr style="background: #f1f5f9; border-bottom: 1px solid #edf2f7;">
-                                        <th style="padding: 12px; text-align: left; font-weight: 700; color: #1e3c72; white-space: nowrap; font-size: 12px;">Student Name</th>
-                                        <th style="padding: 12px; text-align: left; font-weight: 700; color: #1e3c72; white-space: nowrap; font-size: 12px;">Subject Code</th>
-                                        <th style="padding: 12px; text-align: left; font-weight: 700; color: #1e3c72; white-space: nowrap; font-size: 12px;">Subject Name</th>
-                                        <th style="padding: 12px; text-align: center; font-weight: 700; color: #1e3c72; white-space: nowrap; font-size: 12px;">Grade</th>
-                                        <th style="padding: 12px; text-align: center; font-weight: 700; color: #1e3c72; white-space: nowrap; font-size: 12px;">Status</th>
+                                        <th style="padding: 12px; text-align: left; font-weight: 700; color: #1e3c72; font-size: 12px;">Student Name</th>
+                                        <th style="padding: 12px; text-align: left; font-weight: 700; color: #1e3c72; font-size: 12px;">Subject Code</th>
+                                        <th style="padding: 12px; text-align: left; font-weight: 700; color: #1e3c72; font-size: 12px;">Subject Name</th>
+                                        <th style="padding: 12px; text-align: center; font-weight: 700; color: #1e3c72; font-size: 12px;">Midterm</th>
+                                        <th style="padding: 12px; text-align: center; font-weight: 700; color: #1e3c72; font-size: 12px;">Final</th>
+                                        <th style="padding: 12px; text-align: center; font-weight: 700; color: #1e3c72; font-size: 12px;">Total</th>
+                                        <th style="padding: 12px; text-align: center; font-weight: 700; color: #1e3c72; font-size: 12px;">Lab</th>
+                                        <th style="padding: 12px; text-align: center; font-weight: 700; color: #1e3c72; font-size: 12px;">Non-Lab</th>
+                                        <th style="padding: 12px; text-align: center; font-weight: 700; color: #1e3c72; font-size: 12px;">Grade</th>
+                                        <th style="padding: 12px; text-align: left; font-weight: 700; color: #1e3c72; font-size: 12px;">Remarks</th>
+                                        <th style="padding: 12px; text-align: center; font-weight: 700; color: #1e3c72; font-size: 12px;">Status</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -150,15 +163,13 @@
                                         <td style="padding: 12px; color: #334155; font-weight: 500;">{{ $record->student->name ?? 'Unknown' }}</td>
                                         <td style="padding: 12px; color: #64748b;">{{ $record->subject->code ?? 'N/A' }}</td>
                                         <td style="padding: 12px; color: #64748b;">{{ $record->subject->name ?? 'Unknown' }}</td>
-                                        <td style="padding: 12px; text-align: center; font-weight: 700; color: #1e3c72;">
-                                            @php
-                                                $grade = $record->grade ?? '-';
-                                                if (is_numeric($grade) && strpos((string)$grade, '.') !== false) {
-                                                    $grade = number_format((float)$grade, 2, '.', '');
-                                                }
-                                            @endphp
-                                            {{ $grade }}
-                                        </td>
+                                        <td style="padding: 12px; text-align: center;">{{ is_numeric($record->midterm_total) ? number_format($record->midterm_total, 2, '.', '') : ($record->midterm_total ?? '-') }}</td>
+                                        <td style="padding: 12px; text-align: center;">{{ is_numeric($record->final_term_total) ? number_format($record->final_term_total, 2, '.', '') : ($record->final_term_total ?? '-') }}</td>
+                                        <td style="padding: 12px; text-align: center;">{{ is_numeric($record->total_all) ? number_format($record->total_all, 2, '.', '') : ($record->total_all ?? '-') }}</td>
+                                        <td style="padding: 12px; text-align: center;">{{ is_numeric($record->laboratory_total) ? number_format($record->laboratory_total, 2, '.', '') : ($record->laboratory_total ?? '-') }}</td>
+                                        <td style="padding: 12px; text-align: center;">{{ is_numeric($record->non_laboratory_total) ? number_format($record->non_laboratory_total, 2, '.', '') : ($record->non_laboratory_total ?? '-') }}</td>
+                                        <td style="padding: 12px; text-align: center; font-weight: 700; color: #1e3c72;">{{ is_numeric($record->grade) ? number_format($record->grade, 2, '.', '') : ($record->grade ?? '-') }}</td>
+                                        <td style="padding: 12px; color: #64748b;">{{ $record->notes ?? $record->raw_grade ?? '' }}</td>
                                         <td style="padding: 12px; text-align: center;">
                                             <span style="background: #ecfdf5; color: #059669; padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: 700;">Recorded</span>
                                         </td>
