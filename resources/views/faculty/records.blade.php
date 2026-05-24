@@ -41,13 +41,13 @@
         </div>
 
         @php
-            $useExcel = !empty($excelBySection) && !empty($excelPreviewData['headers']);
+            $useExcel = !empty($excelByGroup) && !empty($excelPreviewData['headers']);
         @endphp
 
         @if($useExcel)
             <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(500px, 1fr)); gap: 24px;">
-                @foreach($excelBySection as $section => $sectionRows)
-                    <div class="record-card" data-section="{{ $section }}" style="
+                @foreach($excelByGroup as $groupName => $sectionRows)
+                    <div class="record-card" data-section="{{ $groupName }}" style="
                         background: white;
                         border-radius: 12px;
                         border: 1px solid #edf2f7;
@@ -64,7 +64,7 @@
                             border-radius: 12px 12px 0 0;
                             flex-shrink: 0;
                         ">
-                            <h4 style="font-size: 15px; font-weight: 700; color: #1e3c72; margin: 0;">Section: {{ $section }}</h4>
+                            <h4 style="font-size: 15px; font-weight: 700; color: #1e3c72; margin: 0;">{{ $groupName }}</h4>
                             <p style="font-size: 12px; color: #64748b; margin: 4px 0 0 0;">{{ count($sectionRows) }} records</p>
                         </div>
 
@@ -75,32 +75,30 @@
                             overflow-x: auto;
                             position: relative;
                         " class="card-scroll-container">
-                            <table class="excelRecordsTable" style="width: 100%; border-collapse: collapse; font-size: 13px; table-layout: auto;">
+                            <table class="excelRecordsTable" style="width: 100%; border-collapse: collapse; font-size: 13px;">
                                 <thead style="position: sticky; top: 0; z-index: 10;">
                                     <tr style="background: #f1f5f9; border-bottom: 1px solid #edf2f7;">
-                                        @foreach($excelPreviewData['headers'] as $header)
-                                            <th style="padding: 12px; text-align: left; font-weight: 700; color: #1e3c72; white-space: nowrap; font-size: 12px;">{{ $header }}</th>
+                                        <th style="padding: 12px; text-align: left; border-bottom: 2px solid #edf2f7; color: #1e3c72; font-size: 12px; font-weight: 700; min-width: 150px; position: sticky; left: 0; background: #f1f5f9; z-index: 11;">Name of Student</th>
+                                        @foreach(array_slice($excelPreviewData['headers'] ?? [], 1) as $header)
+                                            <th style="padding: 12px; text-align: left; border-bottom: 2px solid #edf2f7; color: #1e3c72; font-size: 12px; font-weight: 700;">{{ $header }}</th>
                                         @endforeach
                                     </tr>
                                 </thead>
                                 <tbody>
                                     @foreach($sectionRows as $row)
-                                        <tr class="record-row" style="border-bottom: 1px solid #edf2f7; transition: all 0.2s ease;" onmouseover="this.style.backgroundColor='#f8fafc'" onmouseout="this.style.backgroundColor='transparent'">
-                                            @foreach(range(0, count($excelPreviewData['headers']) - 1) as $idx)
+                                        <tr style="border-bottom: 1px solid #edf2f7;">
+                                            @if(count($row) > 0)
                                                 @php
-                                                    $value = $row[$idx] ?? '';
-                                                    if (is_array($value) || is_object($value)) {
-                                                        $value = json_encode($value);
-                                                    }
-
-                                                    $isNumeric = is_numeric($value) && $value !== '';
-                                                    if ($isNumeric) {
-                                                        $display = number_format((float)$value, 2, '.', '');
-                                                    } else {
-                                                        $display = (string)$value;
-                                                    }
+                                                    $firstCell = reset($row);
+                                                    $displayFirstCell = is_scalar($firstCell) ? (string) $firstCell : json_encode($firstCell);
                                                 @endphp
-                                                <td style="padding: 12px; color: #334155; {{ $isNumeric ? 'text-align: center; font-weight:700; white-space: nowrap;' : 'text-align: left;' }}">{{ $display }}</td>
+                                                <td style="padding: 10px 12px; color: #334155; min-width: 150px; position: sticky; left: 0; background: white; z-index: 9;">{{ $displayFirstCell }}</td>
+                                            @endif
+                                            @foreach(array_slice($row, 1) as $cell)
+                                                @php
+                                                    $displayCell = is_scalar($cell) ? (string) $cell : json_encode($cell);
+                                                @endphp
+                                                <td style="padding: 10px 12px; color: #334155;">{{ $displayCell }}</td>
                                             @endforeach
                                         </tr>
                                     @endforeach
@@ -112,8 +110,8 @@
             </div>
         @elseif($records->count() > 0)
             <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(550px, 1fr)); gap: 24px;">
-                @foreach($recordsBySection as $section => $sectionRecords)
-                    <div class="record-card" data-section="{{ $section }}" style="
+                @foreach($recordsByGroup as $groupName => $sectionRecords)
+                    <div class="record-card" data-section="{{ $groupName }}" style="
                         background: white;
                         border-radius: 12px;
                         border: 1px solid #edf2f7;
@@ -130,7 +128,7 @@
                             border-radius: 12px 12px 0 0;
                             flex-shrink: 0;
                         ">
-                            <h4 style="font-size: 15px; font-weight: 700; color: #1e3c72; margin: 0;">Section: {{ $section }}</h4>
+                            <h4 style="font-size: 15px; font-weight: 700; color: #1e3c72; margin: 0;">{{ $groupName }}</h4>
                             <p style="font-size: 12px; color: #64748b; margin: 4px 0 0 0;">{{ count($sectionRecords) }} records</p>
                         </div>
 
@@ -144,32 +142,28 @@
                             <table class="recordsTable" style="width: 100%; border-collapse: collapse; font-size: 13px; table-layout: auto;">
                                 <thead style="position: sticky; top: 0; z-index: 10;">
                                     <tr style="background: #f1f5f9; border-bottom: 1px solid #edf2f7;">
-                                        <th style="padding: 12px; text-align: left; font-weight: 700; color: #1e3c72; font-size: 12px;">Student Name</th>
-                                        <th style="padding: 12px; text-align: left; font-weight: 700; color: #1e3c72; font-size: 12px;">Subject Code</th>
-                                        <th style="padding: 12px; text-align: left; font-weight: 700; color: #1e3c72; font-size: 12px;">Subject Name</th>
-                                        <th style="padding: 12px; text-align: center; font-weight: 700; color: #1e3c72; font-size: 12px;">Midterm</th>
-                                        <th style="padding: 12px; text-align: center; font-weight: 700; color: #1e3c72; font-size: 12px;">Final</th>
-                                        <th style="padding: 12px; text-align: center; font-weight: 700; color: #1e3c72; font-size: 12px;">Total</th>
-                                        <th style="padding: 12px; text-align: center; font-weight: 700; color: #1e3c72; font-size: 12px;">Lab</th>
-                                        <th style="padding: 12px; text-align: center; font-weight: 700; color: #1e3c72; font-size: 12px;">Non-Lab</th>
-                                        <th style="padding: 12px; text-align: center; font-weight: 700; color: #1e3c72; font-size: 12px;">Grade</th>
-                                        <th style="padding: 12px; text-align: left; font-weight: 700; color: #1e3c72; font-size: 12px;">Remarks</th>
-                                        <th style="padding: 12px; text-align: center; font-weight: 700; color: #1e3c72; font-size: 12px;">Status</th>
+                                        <th style="padding: 12px; text-align: left; font-weight: 700; color: #1e3c72; white-space: nowrap; font-size: 12px; min-width: 150px; position: sticky; left: 0; background: #f1f5f9; z-index: 11;">Student Name</th>
+                                        <th style="padding: 12px; text-align: left; font-weight: 700; color: #1e3c72; white-space: nowrap; font-size: 12px;">Subject Code</th>
+                                        <th style="padding: 12px; text-align: left; font-weight: 700; color: #1e3c72; white-space: nowrap; font-size: 12px;">Subject Name</th>
+                                        <th style="padding: 12px; text-align: center; font-weight: 700; color: #1e3c72; white-space: nowrap; font-size: 12px;">Grade</th>
+                                        <th style="padding: 12px; text-align: center; font-weight: 700; color: #1e3c72; white-space: nowrap; font-size: 12px;">Status</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     @foreach($sectionRecords as $record)
                                     <tr class="record-row" style="border-bottom: 1px solid #edf2f7; transition: all 0.2s ease;" onmouseover="this.style.backgroundColor='#f8fafc'" onmouseout="this.style.backgroundColor='transparent'">
-                                        <td style="padding: 12px; color: #334155; font-weight: 500;">{{ $record->student->name ?? 'Unknown' }}</td>
+                                        <td style="padding: 12px; color: #334155; font-weight: 500; min-width: 150px; position: sticky; left: 0; background: white; z-index: 9;">{{ $record->student->name ?? 'Unknown' }}</td>
                                         <td style="padding: 12px; color: #64748b;">{{ $record->subject->code ?? 'N/A' }}</td>
                                         <td style="padding: 12px; color: #64748b;">{{ $record->subject->name ?? 'Unknown' }}</td>
-                                        <td style="padding: 12px; text-align: center;">{{ is_numeric($record->midterm_total) ? number_format($record->midterm_total, 2, '.', '') : ($record->midterm_total ?? '-') }}</td>
-                                        <td style="padding: 12px; text-align: center;">{{ is_numeric($record->final_term_total) ? number_format($record->final_term_total, 2, '.', '') : ($record->final_term_total ?? '-') }}</td>
-                                        <td style="padding: 12px; text-align: center;">{{ is_numeric($record->total_all) ? number_format($record->total_all, 2, '.', '') : ($record->total_all ?? '-') }}</td>
-                                        <td style="padding: 12px; text-align: center;">{{ is_numeric($record->laboratory_total) ? number_format($record->laboratory_total, 2, '.', '') : ($record->laboratory_total ?? '-') }}</td>
-                                        <td style="padding: 12px; text-align: center;">{{ is_numeric($record->non_laboratory_total) ? number_format($record->non_laboratory_total, 2, '.', '') : ($record->non_laboratory_total ?? '-') }}</td>
-                                        <td style="padding: 12px; text-align: center; font-weight: 700; color: #1e3c72;">{{ is_numeric($record->grade) ? number_format($record->grade, 2, '.', '') : ($record->grade ?? '-') }}</td>
-                                        <td style="padding: 12px; color: #64748b;">{{ $record->notes ?? $record->raw_grade ?? '' }}</td>
+                                        <td style="padding: 12px; text-align: center; font-weight: 700; color: #1e3c72;">
+                                            @php
+                                                $grade = $record->grade ?? '-';
+                                                if (is_numeric($grade) && strpos((string)$grade, '.') !== false) {
+                                                    $grade = number_format((float)$grade, 2, '.', '');
+                                                }
+                                            @endphp
+                                            {{ $grade }}
+                                        </td>
                                         <td style="padding: 12px; text-align: center;">
                                             <span style="background: #ecfdf5; color: #059669; padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: 700;">Recorded</span>
                                         </td>

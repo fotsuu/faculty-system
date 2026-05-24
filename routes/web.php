@@ -119,7 +119,11 @@ Route::middleware('auth')->prefix('program-head')->name('program-head.')->group(
 Route::middleware(['auth', 'check.approval'])->prefix('faculty')->name('faculty.')->group(function () {
     Route::get('/dashboard', [DashboardController::class, 'facultyDashboard'])->name('dashboard');
 
+    Route::get('/top-rankings', [DashboardController::class, 'facultyTopRankings'])->name('top-rankings');
+
     Route::get('/students', [DashboardController::class, 'students'])->name('students');
+
+
 
     Route::get('/subjects', [DashboardController::class, 'subjects'])->name('subjects');
     Route::post('/subjects', [DashboardController::class, 'storeSubject'])->name('subjects.store');

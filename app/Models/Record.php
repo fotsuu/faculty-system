@@ -102,47 +102,40 @@ class Record extends Model
         return null;
     }
 
-    // Compute grade points for the grade (numeric scale 0-4.0)
+    // Compute grade points for the grade (PH Scale 1.0 - 5.0)
     public function getGradePointAttribute()
     {
         // If grade_point is already stored in the database, return it
-        // Check from attributes array first
         if (isset($this->attributes['grade_point']) && $this->attributes['grade_point'] !== null) {
             return (float)$this->attributes['grade_point'];
         }
         
         $grade = $this->grade;
+        if (is_null($grade)) return null;
         
-        if (is_null($grade)) {
-            return null;
-        }
-        
-        // If grade is numeric, scale it to 4.0
-        // Assuming grades are on a scale of 1-5, convert to 0-4.0
-        // For now, assume it's already in the 0-4 range or convert from percentage
         if (is_numeric($grade)) {
             $numGrade = (float)$grade;
-            
-            // If it's in the range 0-5, it's likely a 5-point scale, convert to 4-point
-            if ($numGrade >= 0 && $numGrade <= 5) {
-                return round(($numGrade / 5.0) * 4.0, 2);
-            }
-            
-            // If it's larger (e.g., 100), it's a percentage, convert to 4-point
-            if ($numGrade > 5 && $numGrade <= 100) {
-                return round(($numGrade / 100.0) * 4.0, 2);
-            }
-            
-            // If it's between 0-4 already, return as is
-            if ($numGrade >= 0 && $numGrade <= 4) {
+            // Return as is if within PH scale range, or map if 0-100
+            if ($numGrade >= 1.0 && $numGrade <= 5.0) {
                 return round($numGrade, 2);
             }
+            if ($numGrade > 5.0 && $numGrade <= 100) {
+                if ($numGrade >= 93) return 1.00;
+                if ($numGrade >= 86) return 1.25;
+                if ($numGrade >= 81) return 1.50;
+                if ($numGrade >= 76) return 1.75;
+                if ($numGrade >= 71) return 2.00;
+                if ($numGrade >= 66) return 2.25;
+                if ($numGrade >= 61) return 2.50;
+                if ($numGrade >= 56) return 2.75;
+                if ($numGrade >= 51) return 3.00;
+                return 5.00;
+            }
+            return round($numGrade, 2);
         } else {
-            // Letter grade conversion
-            $map = ['A' => 4.0, 'B' => 3.0, 'C' => 2.0, 'D' => 1.0, 'F' => 0.0];
+            // Letter grade conversion if applicable
+            $map = ['A' => 1.0, 'B' => 2.0, 'C' => 3.0, 'D' => 4.0, 'F' => 5.0];
             return isset($map[$grade]) ? $map[$grade] : null;
         }
-        
-        return null;
     }
 }

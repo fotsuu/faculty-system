@@ -18,6 +18,7 @@
         <form method="GET" style="display:flex; gap: 10px; align-items:flex-end; flex-wrap: wrap;" id="institutionalFilterForm">
             <input type="hidden" name="subject_id" id="institutionalSubjectId" value="{{ $selectedSubjectId ?? '' }}">
             <input type="hidden" name="section" id="institutionalSection" value="{{ $selectedSection ?? '' }}">
+
             <div>
                 <label style="display:block; font-size:12px; font-weight:700; color:#64748b; margin-bottom:6px;">Subject / Section</label>
                 @php
@@ -31,6 +32,30 @@
                     @foreach(($subjectSectionOptions ?? []) as $opt)
                         <option value="{{ $opt['value'] }}" {{ $selectedKey === $opt['value'] ? 'selected' : '' }}>
                             {{ $opt['label'] }}
+                        </option>
+                    @endforeach
+                </select>
+            </div>
+
+            <div>
+                <label style="display:block; font-size:12px; font-weight:700; color:#64748b; margin-bottom:6px;">Year Level</label>
+                <select name="year_level" style="min-width: 160px; padding:10px; border:1px solid #e2e8f0; border-radius:8px; font-size:13px;">
+                    <option value="">All Years</option>
+                    @foreach(($filterYearLevels ?? []) as $yl)
+                        <option value="{{ $yl }}" {{ (string)($selectedYearLevel ?? '') === (string)$yl ? 'selected' : '' }}>
+                            {{ $yl }}
+                        </option>
+                    @endforeach
+                </select>
+            </div>
+
+            <div>
+                <label style="display:block; font-size:12px; font-weight:700; color:#64748b; margin-bottom:6px;">Semester</label>
+                <select name="semester" style="min-width: 160px; padding:10px; border:1px solid #e2e8f0; border-radius:8px; font-size:13px;">
+                    <option value="">All Semesters</option>
+                    @foreach(($filterSemesters ?? []) as $sem)
+                        <option value="{{ $sem }}" {{ ($selectedSemester ?? '') === $sem ? 'selected' : '' }}>
+                            {{ $sem }}
                         </option>
                     @endforeach
                 </select>

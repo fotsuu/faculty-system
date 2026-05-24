@@ -16,10 +16,124 @@ use App\Support\ClassRecordColumnOrder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class DashboardController extends Controller
 {
+    /**
+     * Faculty: Top rankings (view all)
+     */
+    public function facultyTopRankings()
+    {
+        $user = Auth::user();
+
+        $selectedSubjectId = request()->query('subject_id');
+        $selectedSubjectId = is_numeric($selectedSubjectId) ? (int) $selectedSubjectId : null;
+
+        $selectedSection = request()->query('section');
+        $selectedSection = is_string($selectedSection) ? trim($selectedSection) : null;
+        if ($selectedSection === '') $selectedSection = null;
+
+        $selectedYearLevel = request()->query('year_level');
+        $selectedYearLevel = is_numeric($selectedYearLevel) ? (string) $selectedYearLevel : null;
+
+        $selectedSemester = request()->query('semester');
+        $selectedSemester = is_string($selectedSemester) ? trim($selectedSemester) : null;
+        if ($selectedSemester === '') $selectedSemester = null;
+
+        $subjectHasSemesterColumn = Schema::hasColumn('subjects', 'semester');
+
+        // Base student set (scope by uploaded records)
+        $studentIdsQuery = Record::where('user_id', $user->id)
+            ->whereNotNull('file_name')
+            ->distinct('student_id')
+            ->pluck('student_id');
+
+        $studentsQuery = Student::whereIn('id', $studentIdsQuery);
+        if ($selectedYearLevel) {
+            $studentsQuery->where('year_level', $selectedYearLevel);
+        }
+        if ($selectedSubjectId) {
+            $studentsQuery->whereHas('records', function ($q) use ($selectedSubjectId) {
+                $q->where('subject_id', $selectedSubjectId);
+            });
+        }
+        if (is_string($selectedSection) && $selectedSection !== '') {
+            $studentsQuery->whereHas('records', function ($q) use ($selectedSection) {
+                if (strcasecmp($selectedSection, 'Unassigned') === 0) {
+                    $q->where(function ($subq) {
+                        $subq->whereNull('section')->orWhere('section', '');
+                    });
+                } else {
+                    $q->where('section', $selectedSection);
+                }
+            });
+        }
+        if ($selectedSemester && $subjectHasSemesterColumn) {
+            $studentsQuery->whereHas('records.subject', function ($sq) use ($selectedSemester) {
+                $sq->where('semester', $selectedSemester);
+            });
+        }
+
+        $students = $studentsQuery->get();
+
+        $rankedStudents = $students
+            ->map(function ($student) use ($user, $selectedSubjectId, $selectedSection) {
+                $records = Record::where('student_id', $student->id)
+                    ->where('user_id', $user->id)
+                    ->whereNotNull('file_name')
+                    ->when($selectedSubjectId, fn ($q) => $q->where('subject_id', $selectedSubjectId))
+                    ->when(is_string($selectedSection) && $selectedSection !== '', function ($q) use ($selectedSection) {
+                        if (strcasecmp($selectedSection, 'Unassigned') === 0) {
+                            $q->where(function ($subq) {
+                                $subq->whereNull('section')->orWhere('section', '');
+                            });
+                        } else {
+                            $q->where('section', $selectedSection);
+                        }
+                    })
+                    ->get();
+
+                $gradePoints = 0;
+                $gradeCount = 0;
+                foreach ($records as $r) {
+                    if (!is_null($r->grade_point) && $r->grade_point > 0) {
+                        $gradePoints += $r->grade_point;
+                        $gradeCount++;
+                    }
+                }
+
+                $gpa = $gradeCount > 0 ? round($gradePoints / $gradeCount, 2) : 0;
+
+                $subjects = $records->map(function ($r) {
+                    return $r->subject->name ?? $r->subject->code ?? 'Unknown';
+                })->unique()->implode(', ');
+
+                return [
+                    'id' => $student->id,
+                    'name' => $student->name,
+                    'student_id' => $student->student_id,
+                    'program' => $student->program,
+                    'subjects' => $subjects,
+                    'gpa' => $gpa,
+                    'recordCount' => $records->count(),
+                ];
+            })
+            ->filter(fn ($s) => $s['gpa'] > 0 && $s['gpa'] <= 2.0)
+            ->sortBy('gpa')
+            ->values()
+            ->all();
+
+        return view('faculty.top-rankings', [
+            'rankedStudents' => $rankedStudents,
+            'selectedYearLevel' => $selectedYearLevel,
+            'selectedSubjectId' => $selectedSubjectId,
+            'selectedSection' => $selectedSection,
+            'selectedSemester' => $selectedSemester,
+        ]);
+    }
+
     public function facultyDashboard()
     {
         $user = Auth::user();
@@ -29,6 +143,14 @@ class DashboardController extends Controller
         $selectedSection = request()->query('section');
         $selectedSection = is_string($selectedSection) ? trim($selectedSection) : null;
         if ($selectedSection === '') $selectedSection = null;
+
+        $selectedYearLevel = request()->query('year_level');
+        $selectedYearLevel = is_numeric($selectedYearLevel) ? (string) $selectedYearLevel : null;
+        $selectedSemester = request()->query('semester');
+        $selectedSemester = is_string($selectedSemester) ? trim($selectedSemester) : null;
+        if ($selectedSemester === '') $selectedSemester = null;
+
+        $subjectHasSemesterColumn = Schema::hasColumn('subjects', 'semester');
         
         // Count unique uploaded class record files (unique file_name per user)
         $totalRecords = Record::where('user_id', $user->id)
@@ -52,6 +174,18 @@ class DashboardController extends Controller
             } else {
                 $totalStudentsQuery->where('section', $selectedSection);
             }
+        }
+
+        if ($selectedYearLevel) {
+            $totalStudentsQuery->whereHas('student', function ($q) use ($selectedYearLevel) {
+                $q->where('year_level', $selectedYearLevel);
+            });
+        }
+
+        if ($selectedSemester && $subjectHasSemesterColumn) {
+            $totalStudentsQuery->whereHas('subject', function ($q) use ($selectedSemester) {
+                $q->where('semester', $selectedSemester);
+            });
         }
         
         $totalStudents = $totalStudentsQuery->count('student_id');
@@ -96,17 +230,26 @@ class DashboardController extends Controller
                 ];
             });
 
-        // Get top performing students...
-        // (existing code remains but moved after analytics initialization)
-        $topStudents = Student::whereIn('id',
+        // Ranking: GPA/grade_point <= 2.0 (PH: lower is better). Show top 10 on dashboard.
+        $rankedStudents = Student::whereIn('id',
             Record::where('user_id', $user->id)
+                ->whereNotNull('file_name')
                 ->distinct('student_id')
                 ->pluck('student_id')
         )
+        ->when($selectedYearLevel, function ($q) use ($selectedYearLevel) {
+            $q->where('year_level', $selectedYearLevel);
+        })
+        ->when($selectedSemester && $subjectHasSemesterColumn, function ($q) use ($selectedSemester) {
+            $q->whereHas('records.subject', function ($sq) use ($selectedSemester) {
+                $sq->where('semester', $selectedSemester);
+            });
+        })
         ->get()
         ->map(function ($student) use ($user, $selectedSubjectId, $selectedSection) {
             $records = Record::where('student_id', $student->id)
                 ->where('user_id', $user->id)
+                ->whereNotNull('file_name')
                 ->when($selectedSubjectId, fn ($q) => $q->where('subject_id', $selectedSubjectId))
                 ->when(is_string($selectedSection) && $selectedSection !== '', function ($q) use ($selectedSection) {
                     if (strcasecmp($selectedSection, 'Unassigned') === 0) {
@@ -118,25 +261,24 @@ class DashboardController extends Controller
                     }
                 })
                 ->get();
-            
+
             $recordCount = $records->count();
-            
-            // Compute average grade (GPA)
+
             $gradePoints = 0;
             $gradeCount = 0;
             foreach ($records as $r) {
+                // GPA/grade_point <= 2.0 should include failing-ish; but compute GPA using positive grade points only
                 if (!is_null($r->grade_point) && $r->grade_point > 0) {
                     $gradePoints += $r->grade_point;
                     $gradeCount++;
                 }
             }
             $gpa = $gradeCount > 0 ? round($gradePoints / $gradeCount, 2) : 0;
-            
-            // Get unique subject names for this student
+
             $subjects = $records->map(function($r) {
                 return $r->subject->name ?? $r->subject->code ?? 'Unknown';
             })->unique()->implode(', ');
-            
+
             return [
                 'id' => $student->id,
                 'name' => $student->name,
@@ -147,10 +289,12 @@ class DashboardController extends Controller
                 'recordCount' => $recordCount,
             ];
         })
-        ->filter(fn($s) => $s['gpa'] > 0)
-        ->sortBy('gpa') // In PH scale (1.0-5.0), 1.0 is better, so sorting ascending is correct
-        ->take(4)
+        ->filter(fn($s) => $s['gpa'] > 0 && $s['gpa'] <= 2.0)
+        ->sortBy('gpa')
         ->values();
+
+        $topStudents = $rankedStudents->take(10)->values();
+
 
         $passFailRates = $analytics['passFailRates'];
         $gradeDistribution = $analytics['gradeDistribution'];
@@ -175,6 +319,27 @@ class DashboardController extends Controller
             ->where('status', 'active')
             ->orderBy('code')
             ->get(['id', 'code', 'name']);
+
+        $filterYearLevels = Student::whereIn('id', Record::where('user_id', $user->id)
+                ->distinct()
+                ->pluck('student_id'))
+            ->distinct()
+            ->pluck('year_level')
+            ->filter()
+            ->sort()
+            ->values();
+
+        $filterSemesters = collect();
+        if ($subjectHasSemesterColumn) {
+            $filterSemesters = Subject::whereIn('id', Record::where('user_id', $user->id)
+                    ->distinct()
+                    ->pluck('subject_id'))
+                ->distinct()
+                ->pluck('semester')
+                ->filter()
+                ->sort()
+                ->values();
+        }
 
         $sectionsQuery = Record::where('user_id', $user->id);
         if ($selectedSubjectId) {
@@ -240,8 +405,12 @@ class DashboardController extends Controller
             'facultyReports' => $facultyReports,
             'filterSubjects' => $filterSubjects,
             'filterSections' => $filterSections,
+            'filterYearLevels' => $filterYearLevels,
+            'filterSemesters' => $filterSemesters,
             'selectedSubjectId' => $selectedSubjectId,
             'selectedSection' => $selectedSection,
+            'selectedYearLevel' => $selectedYearLevel ?? null,
+            'selectedSemester' => $selectedSemester ?? null,
             'subjectSectionOptions' => $subjectSectionOptions,
         ]);
     }
@@ -376,11 +545,30 @@ class DashboardController extends Controller
                 'records' => $group->count(),
             ])->values();
 
-        $topStudents = Student::whereIn('id', Record::whereIn('user_id', $analyticsFacultyIds)->distinct()->pluck('student_id'))->get()
-            ->map(function ($student) use ($analyticsFacultyIds, $selectedSubjectId, $selectedSection) {
+        $selectedYearLevel = request()->query('year_level');
+        $selectedYearLevel = is_numeric($selectedYearLevel) ? (string)$selectedYearLevel : null;
+
+        $selectedSemester = request()->query('semester');
+        $selectedSemester = is_string($selectedSemester) ? trim($selectedSemester) : null;
+        if ($selectedSemester === '') $selectedSemester = null;
+
+        $subjectHasSemesterColumn = Schema::hasColumn('subjects', 'semester');
+
+        $topStudents = Student::whereIn('id', Record::whereIn('user_id', $analyticsFacultyIds)->distinct()->pluck('student_id'))
+            ->when($selectedYearLevel, function ($q) use ($selectedYearLevel) {
+                $q->where('year_level', $selectedYearLevel);
+            })
+            ->when($selectedSemester && $subjectHasSemesterColumn, function ($q) use ($selectedSemester) {
+                $q->whereHas('records.subject', fn ($sq) => $sq->where('semester', $selectedSemester));
+            })
+            ->get()
+            ->map(function ($student) use ($analyticsFacultyIds, $selectedSubjectId, $selectedSection, $selectedSemester) {
                 $records = Record::where('student_id', $student->id)->whereIn('user_id', $analyticsFacultyIds)
                     ->whereNotNull('file_name')
                     ->when($selectedSubjectId, fn ($q) => $q->where('subject_id', $selectedSubjectId))
+                    ->when($selectedSemester && $subjectHasSemesterColumn, function ($q) use ($selectedSemester) {
+                        $q->whereHas('subject', fn ($sq) => $sq->where('semester', $selectedSemester));
+                    })
                     ->when(is_string($selectedSection) && $selectedSection !== '', function ($q) use ($selectedSection) {
                         if (strcasecmp($selectedSection, 'Unassigned') === 0) {
                             $q->where(function ($subq) {
@@ -396,7 +584,7 @@ class DashboardController extends Controller
                     if ($r->grade_point !== null) { $gradeSum += $r->grade_point; $gradeCount++; }
                 }
                 $gpa = $gradeCount > 0 ? round($gradeSum / $gradeCount, 2) : 0;
-                
+
                 // Get unique subject names for this student
                 $subjects = $records->map(function($r) {
                     return $r->subject->name ?? $r->subject->code ?? 'Unknown';
@@ -413,7 +601,7 @@ class DashboardController extends Controller
             })
             ->filter(fn($s) => $s['gpa'] > 0)
             ->sortBy('gpa')
-            ->take(4)
+            ->take(10)
             ->values();
 
         // Get all faculty for management tab
@@ -479,13 +667,22 @@ class DashboardController extends Controller
             }
         }
 
+        $filterYearLevels = Student::whereIn('id', Record::whereIn('user_id', $analyticsFacultyIds)->distinct()->pluck('student_id'))
+            ->distinct()->pluck('year_level')->filter()->sort()->values();
+
+        $filterSemesters = collect();
+        if ($subjectHasSemesterColumn) {
+            $filterSemesters = Subject::whereIn('id', Record::whereIn('user_id', $analyticsFacultyIds)->distinct()->pluck('subject_id'))
+                ->distinct()->pluck('semester')->filter()->sort()->values();
+        }
+
         return view('dashboard.program-head', [
             'totalFaculty' => $totalFaculty, 'totalStudents' => $totalStudents, 'pendingReviews' => 0, 'totalRecords' => $totalRecords,
             'recordsGrowthPercent' => $recordsGrowthPercent, 'passRatePercent' => $passRatePercent,
             'subjects' => $subjects, 'submissions' => $submissions, 
             'passFailRates' => $passFailRates,
-            'attendanceTrends' => $attendanceTrends, 
-            'gradeDistribution' => $gradeDistribution, 
+            'attendanceTrends' => $attendanceTrends,
+            'gradeDistribution' => $gradeDistribution,
             'topStudents' => $topStudents,
             'allFaculty' => $allFaculty,
             'analytics' => $analytics, // Pass the full analytics array
@@ -494,8 +691,12 @@ class DashboardController extends Controller
             'facultyReports' => $facultyReports,
             'filterSubjects' => $filterSubjects,
             'filterSections' => $filterSections,
+            'filterYearLevels' => $filterYearLevels,
+            'filterSemesters' => $filterSemesters,
             'selectedSubjectId' => $selectedSubjectId,
             'selectedSection' => $selectedSection,
+            'selectedYearLevel' => $selectedYearLevel ?? null,
+            'selectedSemester' => $selectedSemester ?? null,
             'subjectSectionOptions' => $subjectSectionOptions,
         ]);
     }
@@ -975,36 +1176,53 @@ class DashboardController extends Controller
         $user = Auth::user();
         $records = Record::where('user_id', $user->id)->with('student', 'subject')->get();
 
-        // Group records by section for separate display
-        $recordsBySection = $records->groupBy(function ($record) {
+        // Group records by subject and section for separate display (matching preview style)
+        $recordsByGroup = $records->groupBy(function ($record) {
+            $subjectName = $record->subject->name ?? $record->subject->code ?? 'Unknown Subject';
             $section = trim((string) $record->section);
-            return $section === '' ? 'Unassigned' : $section;
+            $sectionName = $section === '' ? 'Unassigned' : $section;
+            return $subjectName . ' - ' . $sectionName;
         });
 
         // If Excel preview was uploaded and is still in session, show that data instead
         $excelPreviewData = session('excel_preview_data') ?? [];
-        $excelBySection = null;
+        $excelByGroup = null;
 
         $headers = [];
         $bodyRows = [];
+        $isRawPreview = false;
 
         if (!empty($excelPreviewData['datasets']) && is_array($excelPreviewData['datasets'])) {
-            // merge datasets for preview so user can see everything from all sheets
-            $headers = $excelPreviewData['headers'] ?? [];
+            // merge all datasets for complete display (matching preview modal)
+            $firstHeaders = null;
             foreach ($excelPreviewData['datasets'] as $dataset) {
-                if (empty($headers) && !empty($dataset['headers'])) {
-                    $headers = $dataset['headers'];
+                if (!empty($dataset['preview_rows']) && is_array($dataset['preview_rows'])) {
+                    if ($firstHeaders === null && !empty($dataset['preview_rows'][0])) {
+                        $firstHeaders = $dataset['preview_rows'][0];
+                    }
+                    $bodyRows = array_merge($bodyRows, array_slice($dataset['preview_rows'], 1));
+                    $isRawPreview = true;
+                    continue;
+                }
+
+                if ($firstHeaders === null && !empty($dataset['headers'])) {
+                    $firstHeaders = $dataset['headers'];
                 }
                 if (!empty($dataset['rows']) && is_array($dataset['rows'])) {
                     $bodyRows = array_merge($bodyRows, $dataset['rows']);
                 }
             }
+            $headers = $firstHeaders ?? [];
+        } elseif (!empty($excelPreviewData['preview_rows']) && is_array($excelPreviewData['preview_rows'])) {
+            $headers = $excelPreviewData['preview_rows'][0] ?? [];
+            $bodyRows = array_slice($excelPreviewData['preview_rows'], 1);
+            $isRawPreview = true;
         } elseif (!empty($excelPreviewData['rows']) && !empty($excelPreviewData['headers'])) {
             $headers = $excelPreviewData['headers'];
             $bodyRows = $excelPreviewData['rows'];
         }
 
-        if (!empty($headers) && !empty($bodyRows)) {
+        if (!empty($headers) && !empty($bodyRows) && ! $isRawPreview) {
             $reordered = ClassRecordColumnOrder::reorderTabularHeadersAndRows($headers, $bodyRows);
             $headers = $reordered['headers'];
             $bodyRows = $reordered['rows'];
@@ -1021,22 +1239,26 @@ class DashboardController extends Controller
                 }
             }
 
-            $excelBySection = collect($bodyRows)->groupBy(function ($row) use ($sectionIndex) {
+            // Group by subject (from session meta) and section
+            $subjectName = $excelPreviewData['meta']['subject'] ?? $excelPreviewData['meta']['subject_name'] ?? 'Imported Subject';
+            
+            $excelByGroup = collect($bodyRows)->groupBy(function ($row) use ($sectionIndex, $subjectName) {
+                $sectionValue = 'Unassigned';
                 if ($sectionIndex !== false && isset($row[$sectionIndex])) {
                     $sectionValue = trim((string)$row[$sectionIndex]);
-                    return $sectionValue === '' ? 'Unassigned' : $sectionValue;
+                    if ($sectionValue === '') $sectionValue = 'Unassigned';
                 }
-                return 'Unassigned';
+                return $subjectName . ' - ' . $sectionValue;
             });
         }
 
         // If no in-session preview data exists, fallback to DB records and render them using the same preview-style layout
         $excelTotalRows = 0;
-        if (!empty($excelBySection)) {
-            $excelTotalRows = collect($excelBySection)->map(fn($rows) => is_array($rows) ? count($rows) : 0)->sum();
+        if (!empty($excelByGroup)) {
+            $excelTotalRows = collect($excelByGroup)->map(fn($rows) => is_array($rows) ? count($rows) : 0)->sum();
         }
 
-        if (empty($excelBySection) && $records->isNotEmpty()) {
+        if (empty($excelByGroup) && $records->isNotEmpty()) {
             $scoreKeys = collect();
             foreach ($records as $record) {
                 $scores = $record->scores;
@@ -1077,14 +1299,17 @@ class DashboardController extends Controller
                         $row[] = isset($scores[$key]) ? $scores[$key] : '';
                     }
 
+                    $subjectName = $record->subject->name ?? $record->subject->code ?? 'Unknown Subject';
+                    $sectionName = trim((string)$record->section) === '' ? 'Unassigned' : trim((string)$record->section);
+
                     $rows[] = [
-                        'section' => trim((string)$record->section) === '' ? 'Unassigned' : trim((string)$record->section),
+                        'group' => $subjectName . ' - ' . $sectionName,
                         'row' => $row,
                     ];
                 }
 
-                $excelBySection = collect($rows)->groupBy('section')->map(function ($sectionRows) {
-                    return $sectionRows->pluck('row')->all();
+                $excelByGroup = collect($rows)->groupBy('group')->map(function ($groupRows) {
+                    return $groupRows->pluck('row')->all();
                 });
             }
         }
@@ -1093,10 +1318,10 @@ class DashboardController extends Controller
 
         return view('faculty.records', [
             'records' => $records,
-            'recordsBySection' => $recordsBySection,
+            'recordsByGroup' => $recordsByGroup,
             'totalRecords' => $displayTotalRecords,
             'excelPreviewData' => $excelPreviewData,
-            'excelBySection' => $excelBySection,
+            'excelByGroup' => $excelByGroup,
         ]);
     }
 
@@ -1791,27 +2016,44 @@ class DashboardController extends Controller
         $subjectId = $request->input('subject_id');
 
         // if there is preview data in session, import it now before generating analytics
+        \Log::info('generateAnalytics called', [
+            'user_id' => $user->id ?? null,
+            'has_preview' => $request->session()->has('excel_preview_data'),
+        ]);
+
         if ($request->session()->has('excel_preview_data')) {
-            $preview = $request->session()->pull('excel_preview_data');
+            $previewLog = $request->session()->get('excel_preview_data');
+            \Log::debug('Preview payload at generateAnalytics start', [
+                'user_id' => $user->id ?? null,
+                'preview_keys' => is_array($previewLog) ? array_keys($previewLog) : null,
+                'datasets_count' => is_array($previewLog['datasets'] ?? null) ? count($previewLog['datasets']) : 0,
+            ]);
+            $preview = $request->session()->get('excel_preview_data');
             $importer = new \App\Services\ExcelGradeImporter($user);
             try {
                 $datasets = $preview['datasets'] ?? null;
 
                 if (is_array($datasets) && !empty($datasets)) {
                     $totalRows = 0;
-                    foreach ($datasets as $dataset) {
+                    $allStats = [];
+                    $importedFileNames = [];
+                    foreach ($datasets as $idx => $dataset) {
                         $headers = $dataset['headers'] ?? [];
                         $rows = $dataset['raw_rows'] ?? $dataset['rows'] ?? [];
                         $meta = $dataset['meta'] ?? [];
                         $meta['filename'] = $dataset['filename'] ?? ($preview['filename'] ?? null);
+                        $importedFileNames[] = $meta['filename'] ?? ($meta['uploaded_name'] ?? null);
                         $totalRows += is_array($rows) ? count($rows) : 0;
-                        $importer->importFromParsedData($headers, $rows, $meta);
+                        $stats = $importer->importFromParsedData($headers, $rows, $meta);
+                        $allStats[$idx] = $stats;
                     }
 
                     \Log::info('Preview datasets imported during analytics generation', [
                         'user_id' => $user->id,
                         'datasets' => count($datasets),
                         'rows' => $totalRows,
+                        'stats' => $allStats,
+                        'imported_files' => $importedFileNames,
                     ]);
                 } else {
                     $headers = $preview['headers'] ?? [];
@@ -1822,15 +2064,24 @@ class DashboardController extends Controller
                     // filename may be set as well
                     $meta['filename'] = $preview['filename'] ?? null;
 
-                    $importer->importFromParsedData($headers, $rows, $meta);
-                    \Log::info('Preview data imported during analytics generation', ['user_id' => $user->id, 'rows' => $rowCount]);
+                    $stats = $importer->importFromParsedData($headers, $rows, $meta);
+                    $importedFileNames = [$meta['filename'] ?? ($meta['uploaded_name'] ?? null)];
+                    \Log::info('Preview data imported during analytics generation', ['user_id' => $user->id, 'rows' => $rowCount, 'stats' => $stats, 'imported_files' => $importedFileNames]);
                 }
+
+                // Only forget the preview after successful import
+                $request->session()->forget('excel_preview_data');
+                // attach imported filenames to the request for response
+                $request->attributes->set('imported_file_names', $importedFileNames ?? []);
             } catch (\Exception $e) {
                 \Log::error('Error importing preview data: ' . $e->getMessage(), [
                     'user_id' => $user->id,
                     'trace' => $e->getTraceAsString()
                 ]);
-                // Return error to user instead of silently failing
+                // Return JSON error for AJAX import requests
+                if ($request->expectsJson()) {
+                    return response()->json(['success' => false, 'error' => 'Import failed: ' . $e->getMessage()], 500);
+                }
                 return redirect()->route('dashboard')->with('error', 'Import failed: ' . $e->getMessage());
             }
         }

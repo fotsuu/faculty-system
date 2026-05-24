@@ -66,7 +66,34 @@ class RecordUploadController extends Controller
             }
 
             // save preview (and metadata) in session for later import when analytics generated
+            // include uploaded_name so importer can fallback to a non-null file_name
+            if (!isset($previewData['meta']) || !is_array($previewData['meta'])) {
+                $previewData['meta'] = [];
+            }
+            $previewData['meta']['uploaded_name'] = $name;
+            if (isset($previewData['datasets']) && is_array($previewData['datasets'])) {
+                foreach ($previewData['datasets'] as &$ds) {
+                    if (!isset($ds['meta']) || !is_array($ds['meta'])) $ds['meta'] = [];
+                    $ds['meta']['uploaded_name'] = $name;
+                }
+                unset($ds);
+            }
+
             session([ 'excel_preview_data' => $previewData ]);
+
+            // Debug: log preview session shape so imports can be traced
+            try {
+                \Log::debug('Saved excel_preview_data to session', [
+                    'user_id' => $user->id ?? null,
+                    'filename' => $previewData['filename'] ?? null,
+                    'has_datasets' => isset($previewData['datasets']) && is_array($previewData['datasets']),
+                    'datasets_count' => isset($previewData['datasets']) && is_array($previewData['datasets']) ? count($previewData['datasets']) : 0,
+                    'rows_count' => is_array($previewData['rows'] ?? null) ? count($previewData['rows']) : 0,
+                    'raw_rows_count' => is_array($previewData['raw_rows'] ?? null) ? count($previewData['raw_rows']) : 0,
+                ]);
+            } catch (\Exception $e) {
+                \Log::warning('Failed logging excel_preview_data session info: ' . $e->getMessage());
+            }
 
             \Log::info('File uploaded successfully', [
                 'user_id' => $user->id,
@@ -169,6 +196,7 @@ class RecordUploadController extends Controller
                         'headers' => $headers,
                         'rows' => $rows,
                         'raw_rows' => $parsed['raw_rows'] ?? $rows,
+                        'preview_rows' => $parsed['preview_rows'] ?? [],
                         'meta' => $parsed['meta'] ?? [],
                         'filename' => $fileName,
                     ];
@@ -183,6 +211,7 @@ class RecordUploadController extends Controller
                     'headers' => $first['headers'],
                     'rows' => $first['rows'],
                     'raw_rows' => $first['raw_rows'],
+                    'preview_rows' => $first['preview_rows'],
                     'meta' => $first['meta'],
                     'filename' => $fileName,
                     'datasets' => $datasets,
@@ -207,7 +236,8 @@ class RecordUploadController extends Controller
 
         try {
             $wbDoc = new \SimpleXMLElement($workbookXml);
-            $targetRids = [];
+            $classRecordRids = [];
+            $attendanceRids = [];
             
             // Register namespaces for workbook
             $namespaces = $wbDoc->getNamespaces(true);
@@ -215,34 +245,43 @@ class RecordUploadController extends Controller
 
             foreach ($wbDoc->sheets->sheet as $sheet) {
                 $sheetName = (string)$sheet['name'];
-                if ($sheetName !== '' && (
-                    stripos($sheetName, 'class record') !== false ||
-                    stripos($sheetName, 'classrecord') !== false ||
-                    stripos($sheetName, 'classrec') !== false ||
-                    stripos($sheetName, 'attendance') !== false
-                )) {
-                    // Try with namespace first, then fallback
-                    $rid = (string)$sheet->attributes($rNs)->id;
-                    if (!$rid) {
-                        $rid = (string)$sheet['r:id'];
-                    }
-                    if ($rid) {
-                        $targetRids[] = $rid;
-                    }
+                if ($sheetName === '') {
+                    continue;
+                }
+
+                $sheetNameLower = strtolower($sheetName);
+                $rid = (string)$sheet->attributes($rNs)->id;
+                if (!$rid) {
+                    $rid = (string)$sheet['r:id'];
+                }
+                if (!$rid) {
+                    continue;
+                }
+
+                if (stripos($sheetNameLower, 'class record') !== false || stripos($sheetNameLower, 'classrecord') !== false || stripos($sheetNameLower, 'classrec') !== false) {
+                    $classRecordRids[] = $rid;
+                    continue;
+                }
+
+                if (stripos($sheetNameLower, 'attendance') !== false) {
+                    $attendanceRids[] = $rid;
                 }
             }
 
-            if (empty($targetRids)) {
-                // fallback: all sheet names containing class/record keywords
+            if (!empty($classRecordRids)) {
+                $targetRids = $classRecordRids;
+            } elseif (!empty($attendanceRids)) {
+                $targetRids = $attendanceRids;
+            } else {
+                $targetRids = [];
+                // fallback: any sheet containing class or record keywords
                 foreach ($wbDoc->sheets->sheet as $sheet) {
                     $sheetName = (string)$sheet['name'];
-                    if ($sheetName !== '' && (
-                        stripos($sheetName, 'record') !== false ||
-                        stripos($sheetName, 'class') !== false ||
-                        stripos($sheetName, 'classrec') !== false ||
-                        stripos($sheetName, 'classrecord') !== false ||
-                        stripos($sheetName, 'attendance') !== false
-                    )) {
+                    if ($sheetName === '') {
+                        continue;
+                    }
+                    $sheetNameLower = strtolower($sheetName);
+                    if (stripos($sheetNameLower, 'record') !== false || stripos($sheetNameLower, 'class') !== false) {
                         $rid = (string)$sheet->attributes($rNs)->id;
                         if (!$rid) {
                             $rid = (string)$sheet['r:id'];
@@ -552,26 +591,33 @@ class RecordUploadController extends Controller
 
                 $headers = [];
                 for ($i = $nameCol; $i <= $remarksCol; $i++) {
-                    $headers[] = trim((string)($headerRow[$i] ?? "Col_$i"));
-                }
+                    $val = trim((string)($headerRow[$i] ?? ""));
+                    $parent = ($headerRowIndex > 0) ? trim((string)($sheetData[$headerRowIndex - 1][$i] ?? "")) : "";
 
-                // Ensure first column is clearly labeled as student name when this is the name column.
-                if (isset($headers[0]) && !$this->isStudentNameHeader($headers[0])) {
-                    // If first header was something like Q1/Q2, set it to student labels.
-                    $headers[0] = 'Name of Student';
-                }
-
-                // If we forced name header, shift existing label sequence to include Q1 if missing.
-                if (isset($headers[0]) && $this->isStudentNameHeader($headers[0])) {
-                    $nextLabel = strtolower(trim($headers[1] ?? ''));
-                    // Check if next column is Q2 or higher (not Q1)
-                    if ($nextLabel !== '' && preg_match('/^q+\s*([2-9]|[1-9]\d+)/', $nextLabel) && !$this->isQuizLabel($headers[1], '1')) {
-                        array_splice($headers, 1, 0, 'Q1');
+                    $label = $val;
+                    if (is_numeric($val)) {
+                        $label = "Q" . $val;
                     }
+
+                    if ($parent !== "" && $parent !== $val && !str_contains($val, $parent) && $i > $nameCol) {
+                        $headers[] = $parent . ($label ? " ($label)" : "");
+                    } else {
+                        $headers[] = $label ?: ($i === $nameCol ? "Name of Student" : "Col_$i");
+                    }
+                }
+
+                if (!empty($headers)) {
+                    $headers[0] = "Name of Student";
+                }
+
+                // Inject Q1 if missing but Q2 is first quiz column to align with data content
+                if (count($headers) > 1 && (strpos($headers[1], "Q2") !== false || $headers[1] === "2")) {
+                    array_splice($headers, 1, 0, "Q1");
                 }
 
                 $previewRows = [];
                 $dataRows = [];
+                $previewRows[] = $headers;
 
                 // Identify row where student listing begins (e.g., numeric index + name present)
                 $startDataRow = null;
@@ -637,7 +683,7 @@ class RecordUploadController extends Controller
                     $dataRows[] = $sliceRow;  // Use sliced row for import to match headers
                 }
 
-                return ['headers' => $headers, 'rows' => $previewRows, 'raw_rows' => $dataRows, 'meta' => $meta, 'filename' => $fileName];
+                return ['headers' => $headers, 'rows' => $dataRows, 'raw_rows' => $dataRows, 'preview_rows' => $previewRows, 'meta' => $meta, 'filename' => $fileName];
             }
 
             // Fallback to old fixed layout if a header row isn't detected
@@ -646,16 +692,22 @@ class RecordUploadController extends Controller
             $row13 = $sheetData[13] ?? [];
 
             $headers = [];
-            $lastMainHeader = '';
+            $lastMainHeader = "";
             for ($i = 0; $i <= $maxCol; $i++) {
-                $rawMain = trim($row11[$i] ?? '');
-                if ($rawMain !== '') {
+                $rawMain = trim($row11[$i] ?? "");
+                if ($rawMain !== "") {
                     $lastMainHeader = $rawMain;
                 }
                 $main = $lastMainHeader;
 
-                $sub = $formatExcelValue($row12[$i] ?? '');
-                $max = $row13[$i] ?? '';
+                $sub = $formatExcelValue($row12[$i] ?? "");
+                $max = $row13[$i] ?? "";
+
+                // If sub is numeric, prefix with Q
+                if (is_numeric($sub)) {
+                    $sub = "Q" . $sub;
+                }
+
                 $headerName = trim($main . ($sub ? " ($sub)" : "") . ($max ? " [Max: $max]" : ""));
                 $headers[$i] = $headerName ?: "Col_$i";
             }
@@ -664,7 +716,7 @@ class RecordUploadController extends Controller
             $assigned = false;
             foreach ($headers as $i => $h) {
                 if ($this->isStudentNameHeader($h)) {
-                    $headers[$i] = 'Name of Student';
+                    $headers[$i] = "Name of Student";
                     $assigned = true;
                     break;
                 }
@@ -674,21 +726,36 @@ class RecordUploadController extends Controller
                 $firstSampleRow = $sheetData[14] ?? [];
                 foreach ($firstSampleRow as $i => $v) {
                     $val = trim((string)$v);
-                    if ($val === '' || is_numeric($val)) {
+                    if ($val === "" || is_numeric($val)) {
                         continue;
                     }
                     // assign text-like first non-numeric column from data to name if heuristics suggest.
-                    $headers[$i] = 'Name of Student';
+                    $headers[$i] = "Name of Student";
                     $assigned = true;
                     break;
                 }
             }
 
-            if ($assigned && isset($headers[0]) && $this->isStudentNameHeader($headers[0])) {
-                $nextLabel = strtolower(trim($headers[1] ?? ''));
+            // Reorder headers so Name of Student is at index 0 if it was found elsewhere
+            if ($assigned) {
+                $nameIdx = -1;
+                foreach ($headers as $i => $h) {
+                    if ($h === "Name of Student") {
+                        $nameIdx = $i;
+                        break;
+                    }
+                }
+                if ($nameIdx > 0) {
+                    $nameH = array_splice($headers, $nameIdx, 1);
+                    array_unshift($headers, $nameH[0]);
+                }
+            }
+
+            if ($assigned && isset($headers[0]) && $headers[0] === "Name of Student") {
+                $nextLabel = strtolower(trim($headers[1] ?? ""));
                 // Check if next column is Q2 or higher (not Q1)
-                if ($nextLabel !== '' && preg_match('/^q+\s*([2-9]|[1-9]\d+)/', $nextLabel) && !$this->isQuizLabel($headers[1], '1')) {
-                    array_splice($headers, 1, 0, 'Q1');
+                if ($nextLabel !== "" && (preg_match("/^q+\s*([2-9]|[1-9]\d+)/", $nextLabel) || $nextLabel === "2") && !$this->isQuizLabel($headers[1], "1")) {
+                    array_splice($headers, 1, 0, "Q1");
                 }
             }
 
@@ -739,10 +806,10 @@ class RecordUploadController extends Controller
                 }
             }
 
-            return ['headers' => $headers, 'rows' => $previewRows, 'raw_rows' => $dataRows, 'meta' => $meta, 'filename' => $fileName];
+            return ['headers' => $headers, 'rows' => $dataRows, 'raw_rows' => $dataRows, 'preview_rows' => $previewRows, 'meta' => $meta, 'filename' => $fileName];
         } catch (\Exception $e) {
             \Log::error('XML Parse Error: ' . $e->getMessage());
-            return ['headers' => [], 'rows' => [], 'meta' => [], 'filename' => $fileName];
+            return ['headers' => [], 'rows' => [], 'raw_rows' => [], 'preview_rows' => [], 'meta' => [], 'filename' => $fileName];
         }
     }
 
@@ -1026,16 +1093,35 @@ class RecordUploadController extends Controller
                 $numericGrade = (float) str_replace(',', '.', $rawGrade);
             }
 
-            // Compute grade point (0-4) using the same logic as Record model
+            // Extract GWA/Equivalent from scores if present to ensure accurate ranking
             $gradePoint = null;
-            if (!is_null($numericGrade)) {
+            $eqvKeys = ['GRADE (EQV)', 'grade eqv', 'eqv', 'equivalent', 'grade equivalent', 'eqv.', 'GWA', 'GPA'];
+            foreach ($eqvKeys as $ek) {
+                foreach ($scores as $sk => $sv) {
+                    if (strcasecmp(trim($sk), $ek) === 0 && is_numeric($sv)) {
+                        $gradePoint = (float)$sv;
+                        break 2;
+                    }
+                }
+            }
+
+            // Fallback to numeric grade mapping if EQV not found
+            if (is_null($gradePoint) && !is_null($numericGrade)) {
                 $num = $numericGrade;
-                if ($num >= 0 && $num <= 5) {
-                    $gradePoint = round(($num / 5.0) * 4.0, 4);
-                } elseif ($num > 5 && $num <= 100) {
-                    $gradePoint = round(($num / 100.0) * 4.0, 4);
-                } elseif ($num >= 0 && $num <= 4) {
-                    $gradePoint = round($num, 4);
+                // If it looks like a 0-100 scale, map it
+                if ($num > 5.0) {
+                    if ($num >= 93) $gradePoint = 1.00;
+                    elseif ($num >= 86) $gradePoint = 1.25;
+                    elseif ($num >= 81) $gradePoint = 1.50;
+                    elseif ($num >= 76) $gradePoint = 1.75;
+                    elseif ($num >= 71) $gradePoint = 2.00;
+                    elseif ($num >= 66) $gradePoint = 2.25;
+                    elseif ($num >= 61) $gradePoint = 2.50;
+                    elseif ($num >= 56) $gradePoint = 2.75;
+                    elseif ($num >= 51) $gradePoint = 3.00;
+                    else $gradePoint = 5.00;
+                } else {
+                    $gradePoint = $num;
                 }
             }
 

@@ -116,6 +116,7 @@
                 <form method="GET" style="display:flex; gap: 10px; align-items:flex-end; flex-wrap: wrap;" id="analyticsFilterForm">
                     <input type="hidden" name="subject_id" id="filterSubjectId" value="{{ $selectedSubjectId ?? '' }}">
                     <input type="hidden" name="section" id="filterSection" value="{{ $selectedSection ?? '' }}">
+
                     <div>
                         <label style="display:block; font-size:12px; font-weight:700; color:#64748b; margin-bottom:6px;">Subject / Section</label>
                         @php
@@ -129,6 +130,30 @@
                             @foreach(($subjectSectionOptions ?? []) as $opt)
                                 <option value="{{ $opt['value'] }}" {{ $selectedKey === $opt['value'] ? 'selected' : '' }}>
                                     {{ $opt['label'] }}
+                                </option>
+                            @endforeach
+                        </select>
+                    </div>
+
+                    <div>
+                        <label style="display:block; font-size:12px; font-weight:700; color:#64748b; margin-bottom:6px;">Year Level</label>
+                        <select name="year_level" style="min-width: 160px; padding:10px; border:1px solid #e2e8f0; border-radius:8px; font-size:13px;">
+                            <option value="">All Years</option>
+                            @foreach(($filterYearLevels ?? []) as $yl)
+                                <option value="{{ $yl }}" {{ (string)($selectedYearLevel ?? '') === (string)$yl ? 'selected' : '' }}>
+                                    {{ $yl }}
+                                </option>
+                            @endforeach
+                        </select>
+                    </div>
+
+                    <div>
+                        <label style="display:block; font-size:12px; font-weight:700; color:#64748b; margin-bottom:6px;">Semester</label>
+                        <select name="semester" style="min-width: 160px; padding:10px; border:1px solid #e2e8f0; border-radius:8px; font-size:13px;">
+                            <option value="">All Semesters</option>
+                            @foreach(($filterSemesters ?? []) as $sem)
+                                <option value="{{ $sem }}" {{ ($selectedSemester ?? '') === $sem ? 'selected' : '' }}>
+                                    {{ $sem }}
                                 </option>
                             @endforeach
                         </select>
@@ -220,7 +245,7 @@
             <div class="section-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
                 <div>
                     <h3 class="section-title" style="font-size: 18px; font-weight: 700; color: #1e3c72;">🏆 Ranking of Top Performing Students</h3>
-                    <div class="section-subtitle" style="font-size: 13px; color: #999; margin-top: 4px;">Based on cumulative GPA this semester</div>
+                    <div class="section-subtitle" style="font-size: 13px; color: #999; margin-top: 4px;">Based on cumulative GWA this semester</div>
                 </div>
                 @php
                     $studentListQueryParams = array_filter([
@@ -230,7 +255,7 @@
                         return !is_null($v) && $v !== '';
                     });
                 @endphp
-                <a href="{{ route('faculty.students', $studentListQueryParams) }}" style="font-size: 12px; color: #1e3c72; text-decoration: none; font-weight: 600;">View All →</a>
+<a href="{{ route('faculty.top-rankings', request()->query()) }}" style="font-size: 12px; color: #1e3c72; text-decoration: none; font-weight: 600;">View All →</a>
             </div>
             <ul style="list-style: none; padding: 0; margin-bottom: 16px;">
                 @forelse($topStudents as $index => $performer)
@@ -241,8 +266,8 @@
                             <div style="font-size: 11px; color: #999;">{{ $performer['subjects'] }}</div>
                         </div>
                         <div style="text-align: right; min-width: 90px;">
-                            <div style="font-size: 18px; font-weight: 700; color: #1e3c72;">{{ $performer['gpa'] }}</div>
-                            <div style="font-size: 11px; color: #999;">GPA Score</div>
+                            <div style="font-size: 18px; font-weight: 700; color: #1e3c72;">{{ number_format($performer['gpa'], 2) }}</div>
+                            <div style="font-size: 11px; color: #999;">GWA</div>
                         </div>
                     </li>
                 @empty
@@ -334,34 +359,40 @@
             </div>
             
             <div style="flex: 1; overflow: auto; margin-bottom: 20px; border: 1px solid #edf2f7; border-radius: 8px;">
+                @php
+                    $previewRows = $excelPreviewData['preview_rows'] ?? [];
+                    $previewHeaderRow = [];
+                    $previewBodyRows = [];
+                    if (!empty($previewRows)) {
+                        $previewHeaderRow = $previewRows[0];
+                        $previewBodyRows = array_slice($previewRows, 1);
+                    }
+                @endphp
+
                 <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
-                    <thead style="background: #f8fafc; position: sticky; top: 0;">
-                        <tr>
-                            @foreach($excelPreviewData['headers'] as $header)
-                                <th style="padding: 12px; text-align: left; border-bottom: 2px solid #edf2f7; color: #1e3c72;">{{ $header }}</th>
-                            @endforeach
-                        </tr>
-                    </thead>
+                    @if(!empty($previewHeaderRow))
+                        <thead style="background: #f8fafc; position: sticky; top: 0; z-index: 2;">
+                            <tr>
+                                <th style="padding: 12px; text-align: left; border-bottom: 2px solid #edf2f7; color: #1e3c72; min-width: 150px; position: sticky; left: 0; background: #f8fafc; z-index: 3;">Name of Student</th>
+                                @foreach(array_slice($previewHeaderRow, 1) as $header)
+                                    <th style="padding: 12px; text-align: left; border-bottom: 2px solid #edf2f7; color: #1e3c72;">{{ $header }}</th>
+                                @endforeach
+                            </tr>
+                        </thead>
+                    @endif
                     <tbody>
-                        @foreach($excelPreviewData['rows'] as $row)
+                        @foreach($previewBodyRows as $row)
                             <tr style="border-bottom: 1px solid #edf2f7;">
-                                @foreach($row as $cell)
+                                @if(count($row) > 0)
                                     @php
-                                        $displayCell = $cell;
-                                        if (is_numeric($cell)) {
-                                            $cellStr = (string)$cell;
-                                            if (strpos($cellStr, '.') !== false) {
-                                                $decimals = strlen(explode('.', $cellStr)[1]);
-                                                if ($decimals > 2) {
-                                                    $displayCell = number_format((float)$cell, 2, '.', '');
-                                                } else {
-                                                    $displayCell = rtrim(rtrim($cellStr, '0'), '.');
-                                                    if ($displayCell === '' || $displayCell === '-') {
-                                                        $displayCell = $cellStr;
-                                                    }
-                                                }
-                                            }
-                                        }
+                                        $firstCell = reset($row);
+                                        $displayFirstCell = is_scalar($firstCell) ? (string) $firstCell : json_encode($firstCell);
+                                    @endphp
+                                    <td style="padding: 10px 12px; color: #334155; min-width: 150px; position: sticky; left: 0; background: white; z-index: 2;">{{ $displayFirstCell }}</td>
+                                @endif
+                                @foreach(array_slice($row, 1) as $cell)
+                                    @php
+                                        $displayCell = is_scalar($cell) ? (string) $cell : json_encode($cell);
                                     @endphp
                                     <td style="padding: 10px 12px; color: #334155;">{{ $displayCell }}</td>
                                 @endforeach
@@ -369,9 +400,9 @@
                         @endforeach
                     </tbody>
                 </table>
-                @if(count($excelPreviewData['rows']) > 0)
+                @if(count($previewBodyRows) > 0)
                     <div style="padding: 15px; text-align: center; color: #64748b; font-style: italic; background: #f8fafc;">
-                        Total: {{ count($excelPreviewData['rows']) }} rows
+                        Total: {{ count($previewBodyRows) }} rows
                     </div>
                 @endif
             </div>

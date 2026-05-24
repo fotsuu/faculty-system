@@ -61,7 +61,17 @@ class ExcelGradeImporter
     private function processDataRow($headers, $row, $meta, &$stats, $rowIndex = null)
     {
         if (empty($headers)) {
-            return; // Skip if no headers
+            \Log::warning('ExcelGradeImporter: empty headers provided, attempting fallback', [
+                'user_id' => $this->user->id ?? null,
+                'row_index' => $rowIndex,
+                'row' => $row,
+                'meta' => $meta,
+            ]);
+            // Create generic headers to allow positional fallback
+            $headers = [];
+            for ($i = 0; $i < count($row); $i++) {
+                $headers[] = 'col_' . $i;
+            }
         }
         
         // Normalize row length to match headers: pad if short, slice if long
@@ -83,6 +93,17 @@ class ExcelGradeImporter
         $studentId = $this->findValue($data, ['id no.', 'id no', 'student id', 'student_id', 'id', 'sid']);
         $studentName = $this->findValue($data, ['name', 'student name', 'student_name', 'NAME']);
 
+        // Fallback: if no student name found via header matching, use first non-empty cell
+        if (empty($studentName)) {
+            foreach ($row as $cellVal) {
+                if ($cellVal !== null && trim((string)$cellVal) !== '') {
+                    $studentName = trim((string)$cellVal);
+                    \Log::debug('ExcelGradeImporter: fallback student name from row', ['row_index' => $rowIndex, 'student_name' => $studentName]);
+                    break;
+                }
+            }
+        }
+
         // If no student ID found, try to find or create based on name
         if (!$studentId && $studentName) {
             // Try to find existing student by name
@@ -96,6 +117,14 @@ class ExcelGradeImporter
         }
 
         if (!$studentId || !$studentName) {
+            \Log::warning('ExcelGradeImporter: skipping row - missing student id or name', [
+                'user_id' => $this->user->id ?? null,
+                'row_index' => $rowIndex,
+                'student_id' => $studentId,
+                'student_name' => $studentName,
+                'meta' => $meta,
+                'row' => $row,
+            ]);
             return; // Skip rows without both student ID and name
         }
 
@@ -214,10 +243,30 @@ class ExcelGradeImporter
         $numericGrade = is_numeric($finalGradeRaw) ? round((float)$finalGradeRaw, 2) : null;
         $rawGradeValue = $finalGradeRaw ?? null;
 
-        // For many class-record formats, EQV is the true PH-grade-point equivalent (e.g., 1.25, 2.50).
-        // Use it as grade_point when present, while keeping numericGrade/rawGrade from grade columns.
-        $eqvGradeRaw = $this->findValue($data, ['eqv', 'equivalent', 'grade equivalent', 'eqv.']);
-        $eqvGradePoint = is_numeric($eqvGradeRaw) ? round((float)$eqvGradeRaw, 2) : null;
+        // Priority to GRADE (EQV) to avoid collision with other EQV columns (like quiz EQV).
+        // Stricter check for GWA/Equivalent
+        $gradePoint = null;
+        $eqvGradeRaw = $this->findValue($data, ['GRADE (EQV)', 'grade eqv', 'grade equivalent']);
+        
+        if (is_numeric($eqvGradeRaw)) {
+            $gradePoint = (float)$eqvGradeRaw;
+        } else {
+            // Fallback to broader EQV check if specific grade eqv not found
+            $broadEqv = $this->findValue($data, ['eqv', 'equivalent', 'eqv.']);
+            if (is_numeric($broadEqv)) {
+                $gradePoint = (float)$broadEqv;
+            }
+        }
+
+        // Priority to "Final Grade" or "GPA" columns as the authoritative numeric grade
+        $finalGradeRaw = $this->findValue($data, ['final grade', 'final_grade', 'final-grade', 'Final Grade', 'GPA', 'GWA']);
+        $numericGrade = is_numeric($finalGradeRaw) ? round((float)$finalGradeRaw, 2) : null;
+        $rawGradeValue = $finalGradeRaw ?? null;
+
+        // If gradePoint still null, use numericGrade
+        if (is_null($gradePoint)) {
+            $gradePoint = $numericGrade;
+        }
 
         // Maintain exactly two decimals in raw grade for common final-grade format
         if (is_numeric($rawGradeValue) && strpos((string)$rawGradeValue, '.') !== false) {
@@ -234,18 +283,16 @@ class ExcelGradeImporter
         if (is_null($numericGrade) && !is_null($totalAll)) {
             $numericGrade = $this->mapTotalToPHGrade($totalAll);
             $rawGradeValue = $numericGrade;
+            if (is_null($gradePoint)) $gradePoint = $numericGrade;
         }
 
-        // Calculate grade point (PH scale 1.0 - 5.0 where 1.0 is best)
-        $gradePoint = !is_null($eqvGradePoint) ? $eqvGradePoint : $numericGrade;
-        
         // If the value is on a 0-100 scale, convert it to 1.0-5.0 scale
         if (!is_null($gradePoint) && $gradePoint > 5.0) {
             $gradePoint = $this->mapTotalToPHGrade($gradePoint);
         }
 
         // Save full row into records so original Excel data is preserved
-        Record::updateOrCreate(
+        $record = Record::updateOrCreate(
             [
                 'user_id' => $this->user->id,
                 'subject_id' => $subject->id,
@@ -253,7 +300,7 @@ class ExcelGradeImporter
             ],
             [
                 'section' => !empty($meta['section']) ? (string) $meta['section'] : null,
-                'file_name' => $meta['filename'] ?? null,
+                    'file_name' => $meta['filename'] ?? $meta['uploaded_name'] ?? ('import_' . time() . '_' . ($this->user->id ?? '0')),
                 'notes' => 'Imported from Excel',
                 'scores' => $data,
                 'row_index' => $rowIndex,
@@ -268,6 +315,14 @@ class ExcelGradeImporter
                 'submission_status' => 'pending',
             ]
         );
+        \Log::info('ExcelGradeImporter: record saved', [
+            'user_id' => $this->user->id ?? null,
+            'subject_id' => $subject->id ?? null,
+            'student_id' => $student->id ?? null,
+            'record_id' => $record->id ?? null,
+            'file_name' => $meta['filename'] ?? null,
+            'row_index' => $rowIndex,
+        ]);
         $stats['records_saved']++;
 
         // Process each score/assessment column
