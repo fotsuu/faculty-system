@@ -97,6 +97,11 @@
                                             @foreach(array_slice($row, 1) as $cell)
                                                 @php
                                                     $displayCell = is_scalar($cell) ? (string) $cell : json_encode($cell);
+                                                    if (is_numeric($displayCell)) {
+                                                        if (strpos($displayCell, '.') !== false || (float)$displayCell <= 100) {
+                                                            $displayCell = number_format((float)$displayCell, 2, '.', '');
+                                                        }
+                                                    }
                                                 @endphp
                                                 <td style="padding: 10px 12px; color: #334155;">{{ $displayCell }}</td>
                                             @endforeach
@@ -158,7 +163,7 @@
                                         <td style="padding: 12px; text-align: center; font-weight: 700; color: #1e3c72;">
                                             @php
                                                 $grade = $record->grade ?? '-';
-                                                if (is_numeric($grade) && strpos((string)$grade, '.') !== false) {
+                                                if (is_numeric($grade)) {
                                                     $grade = number_format((float)$grade, 2, '.', '');
                                                 }
                                             @endphp

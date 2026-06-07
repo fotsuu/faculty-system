@@ -46,7 +46,15 @@
                                         <td style="padding: 14px 16px; color: #334155; font-weight: 600;">{{ $student['name'] }}</td>
                                         <td style="padding: 14px 16px; color: #64748b;">{{ $student['program'] }}</td>
                                         <td style="padding: 14px 16px; text-align: center; color: #64748b;">{{ $student['recordCount'] }}</td>
-                                        <td style="padding: 14px 16px; text-align: center; font-weight: 700; color: #1e3c72;">{{ $student['gpa'] ?? '-' }}</td>
+                                        <td style="padding: 14px 16px; text-align: center; font-weight: 700; color: #1e3c72;">
+                                            @php
+                                                $gpa = $student['gpa'] ?? '-';
+                                                if (is_numeric($gpa)) {
+                                                    $gpa = number_format((float)$gpa, 2, '.', '');
+                                                }
+                                            @endphp
+                                            {{ $gpa }}
+                                        </td>
                                         <td style="padding: 14px 16px; text-align: center;">
                                             <button
                                                 onclick="viewStudentDetails({{ json_encode($student['name']) }}, {{ (int)$student['id'] }}, {{ json_encode($group['subject_id']) }}, {{ json_encode($group['section']) }})"
@@ -354,7 +362,16 @@
                     let cellStyle = 'padding: 10px 12px; color: #334155;';
                     if (cell === 'Present') cellStyle += 'color: #059669; font-weight: 600;';
                     if (cell === 'Absent') cellStyle += 'color: #dc2626; font-weight: 600;';
-                    html += `<td style="${cellStyle}">${cell}</td>`;
+                    
+                    let displayValue = cell;
+                    if (typeof cell === 'number' || (typeof cell === 'string' && /^-?\d+(\.\d+)?$/.test(cell.trim()))) {
+                        const val = parseFloat(cell);
+                        if (String(cell).includes('.') || val <= 100) {
+                            displayValue = val.toFixed(2);
+                        }
+                    }
+                    
+                    html += `<td style="${cellStyle}">${displayValue}</td>`;
                 });
                 html += '</tr>';
             });

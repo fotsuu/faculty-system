@@ -337,8 +337,20 @@ class AnalyticsService
                 $totalPossible = $attendances->count();
             }
 
-            $attendancePercent = $totalPossible > 0 ? round((($presentCount + $lateCount * 0.5) / $totalPossible) * 100, 1) : 0;
             $weekly = $this->buildWeeklyAttendance($subject->id);
+
+            $attendancePercent = $totalPossible > 0
+                ? round((($presentCount + $lateCount * 0.5) / $totalPossible) * 100, 1)
+                : 0;
+
+            // Fallback: LEC/LAB attendance equivalents from class record sheets.
+            if ($totalPossible === 0 && ($weekly['average'] ?? 0) > 0) {
+                $attendancePercent = $weekly['average'];
+                $summary = $this->computeAttendanceFromLecLabSummary($subject->id);
+                $studentCount = max(1, (int) ($summary['student_count'] ?? 0));
+                $totalPossible = $studentCount;
+                $presentCount = (int) round($studentCount * ($attendancePercent / 100));
+            }
 
             return [
                 'code' => $subject->code,
@@ -390,7 +402,7 @@ class AnalyticsService
             ->get();
 
         if ($rows->isEmpty()) {
-            return ['week1' => 0, 'week2' => 0, 'week3' => 0, 'week4' => 0, 'average' => 0];
+            return $this->buildWeeklyAttendanceFromLecLabSummary($subjectId);
         }
 
         $perSession = $rows->groupBy('session_number')
@@ -420,6 +432,110 @@ class AnalyticsService
             'week4' => $weeks[3],
             'average' => round($perSession->avg(), 1),
         ];
+    }
+
+    /**
+     * Read lecture (LEC) and laboratory (LAB) attendance equivalents from class records.
+     */
+    private function computeAttendanceFromLecLabSummary($subjectId)
+    {
+        $records = Record::where('subject_id', $subjectId);
+        $records = $this->applyRecordFilters($records)->get();
+
+        $lecValues = [];
+        $labValues = [];
+
+        foreach ($records as $record) {
+            $scores = $record->scores;
+            if (!is_array($scores)) {
+                continue;
+            }
+
+            foreach ($scores as $column => $value) {
+                if (!$this->isLecLabSummaryColumn($column)) {
+                    continue;
+                }
+
+                $raw = trim((string) $value);
+                if ($raw === '' || !is_numeric($raw)) {
+                    continue;
+                }
+
+                $val = (float) $raw;
+                if ($val < 0 || $val > 100) {
+                    continue;
+                }
+
+                if ($this->isLabSummaryColumn($column)) {
+                    $labValues[] = $val;
+                } else {
+                    $lecValues[] = $val;
+                }
+            }
+        }
+
+        $lecAvg = !empty($lecValues) ? round(array_sum($lecValues) / count($lecValues), 1) : null;
+        $labAvg = !empty($labValues) ? round(array_sum($labValues) / count($labValues), 1) : null;
+
+        return [
+            'lec_avg' => $lecAvg,
+            'lab_avg' => $labAvg,
+            'student_count' => max(count($lecValues), count($labValues)),
+        ];
+    }
+
+    private function buildWeeklyAttendanceFromLecLabSummary($subjectId)
+    {
+        $summary = $this->computeAttendanceFromLecLabSummary($subjectId);
+        $lec = $summary['lec_avg'];
+        $lab = $summary['lab_avg'];
+
+        if ($lec === null && $lab === null) {
+            return ['week1' => 0, 'week2' => 0, 'week3' => 0, 'week4' => 0, 'average' => 0];
+        }
+
+        $lec = $lec ?? $lab;
+        $lab = $lab ?? $lec;
+        $average = round(($lec + $lab) / 2, 1);
+
+        return [
+            'week1' => $lec,
+            'week2' => $lec,
+            'week3' => $lab,
+            'week4' => $lab,
+            'average' => $average,
+        ];
+    }
+
+    private function isLecLabSummaryColumn($column)
+    {
+        $lower = trim(strtolower((string) $column));
+
+        if (preg_match('/\b(total|overall|summary|quiz|exam|eqv|midterm|final|grade|activity|remark|project)\b/i', $lower)) {
+            return false;
+        }
+
+        if (in_array($lower, ['lec', 'lab'], true)) {
+            return true;
+        }
+
+        if (preg_match('/^(lec|lecture)(\s+attendance|\s+att|\s+%)?$/i', $column)) {
+            return true;
+        }
+
+        if (preg_match('/^(lab|laboratory)(\s+attendance|\s+att|\s+%)?$/i', $column)) {
+            return true;
+        }
+
+        return false;
+    }
+
+    private function isLabSummaryColumn($column)
+    {
+        $lower = trim(strtolower((string) $column));
+
+        return $lower === 'lab'
+            || preg_match('/^(lab|laboratory)(\s+attendance|\s+att|\s+%)?$/i', $column);
     }
 
     private function computeAttendanceFromRecordScoresBySubject($subjectId)

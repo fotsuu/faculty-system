@@ -269,7 +269,10 @@ class RecordUploadController extends Controller
             }
 
             if (!empty($classRecordRids)) {
-                $targetRids = $classRecordRids;
+                // Import class record and attendance sheets so session-level marks are available.
+                $targetRids = !empty($attendanceRids)
+                    ? array_values(array_unique(array_merge($classRecordRids, $attendanceRids)))
+                    : $classRecordRids;
             } elseif (!empty($attendanceRids)) {
                 $targetRids = $attendanceRids;
             } else {

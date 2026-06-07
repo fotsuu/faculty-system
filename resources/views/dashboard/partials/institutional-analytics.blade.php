@@ -3,7 +3,15 @@
     $totalFail = $totalFail ?? 0;
     $isPassFailEmpty = ($totalPass + $totalFail) == 0;
     $attendanceRaw = $attendanceTrends ?? [];
-    $isAttendanceEmpty = empty($attendanceRaw) || (is_array($attendanceRaw) && count($attendanceRaw) === 0);
+    $isAttendanceEmpty = empty($attendanceRaw)
+        || (is_array($attendanceRaw) && count($attendanceRaw) === 0)
+        || collect($attendanceRaw)->every(function ($t) {
+            return ((float)($t['week1'] ?? 0)) === 0.0
+                && ((float)($t['week2'] ?? 0)) === 0.0
+                && ((float)($t['week3'] ?? 0)) === 0.0
+                && ((float)($t['week4'] ?? 0)) === 0.0
+                && ((float)($t['attendance_percent'] ?? $t['average'] ?? 0)) === 0.0;
+        });
     $selectedSubjectId = $selectedSubjectId ?? null;
     $selectedSection = $selectedSection ?? null;
 @endphp

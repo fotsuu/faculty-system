@@ -264,20 +264,9 @@
                                 if (!isNumeric) {
                                     cellValue = raw ?? '—';
                                 } else {
-                                    // Mirror dashboard preview formatting:
-                                    // - if decimals > 2 => round to 2 decimals
-                                    // - else => preserve, but trim trailing zeros and optional trailing dot
-                                    if (String(rawStr).includes('.')) {
-                                        const parts = String(rawStr).split('.');
-                                        const decimals = (parts[1] ?? '').length;
-                                        if (decimals > 2) {
-                                            cellValue = parseFloat(rawStr).toFixed(2);
-                                        } else {
-                                            let trimmed = String(rawStr);
-                                            trimmed = trimmed.replace(/0+$/,'').replace(/\.$/,'');
-                                            if (trimmed === '' || trimmed === '-') trimmed = String(rawStr);
-                                            cellValue = trimmed;
-                                        }
+                                    const val = parseFloat(rawStr);
+                                    if (String(rawStr).includes('.') || val <= 100) {
+                                        cellValue = val.toFixed(2);
                                     } else {
                                         cellValue = String(rawStr);
                                     }

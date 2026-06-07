@@ -71,8 +71,10 @@
                                             @foreach(range(0, count($headers) - 1) as $idx)
                                                 @php
                                                     $value = $row[$idx] ?? '';
-                                                    if (is_numeric($value) && strpos((string)$value, '.') !== false) {
-                                                        $value = number_format((float)$value, 2, '.', '');
+                                                    if (is_numeric($value)) {
+                                                        if (strpos((string)$value, '.') !== false || (float)$value <= 100) {
+                                                            $value = number_format((float)$value, 2, '.', '');
+                                                        }
                                                     }
                                                 @endphp
                                                 <td style="padding: 12px; color: #334155; white-space: nowrap;">{{ $value }}</td>
