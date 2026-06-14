@@ -95,6 +95,7 @@ Route::post('/logout', function (Request $request) {
 Route::middleware('auth')->prefix('dean')->name('dean.')->group(function () {
     Route::get('/class-records', [DeanController::class, 'classRecords'])->name('class-records');
     Route::get('/class-records/view', [DeanController::class, 'viewClassRecord'])->name('class-records.view');
+    Route::get('/top-rankings', [DeanController::class, 'topRankings'])->name('top-rankings');
     Route::get('/export-data', [DeanController::class, 'exportAllData'])->name('export');
     Route::get('/settings', [DeanController::class, 'systemSettings'])->name('settings');
     Route::post('/settings', [DeanController::class, 'updateSettings'])->name('settings.update');
@@ -108,6 +109,7 @@ Route::middleware('auth')->prefix('dean')->name('dean.')->group(function () {
 Route::middleware('auth')->prefix('program-head')->name('program-head.')->group(function () {
     Route::get('/class-records', [DashboardController::class, 'programHeadClassRecords'])->name('class-records');
     Route::get('/class-records/view', [DashboardController::class, 'programHeadViewClassRecord'])->name('class-records.view');
+    Route::get('/top-rankings', [DashboardController::class, 'programHeadTopRankings'])->name('top-rankings');
     Route::get('/reports', [DashboardController::class, 'programHeadReports'])->name('reports');
     Route::get('/reports/{report}/view', [DashboardController::class, 'viewReport'])->name('reports.view');
     Route::get('/submission/{userId}/{subjectId}', [DeanController::class, 'viewSubmission'])->name('submission.view');

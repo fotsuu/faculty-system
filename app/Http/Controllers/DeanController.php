@@ -9,6 +9,7 @@ use App\Models\User;
 use App\Support\ClassRecordColumnOrder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Schema;
 
 class DeanController extends Controller
 {
@@ -117,44 +118,15 @@ class DeanController extends Controller
             ->take(10)
             ->values();
         
-        // Get top performing students
-        $topStudents = Student::whereIn('id', Record::whereIn('user_id', $analyticsFacultyIds)->distinct()->pluck('student_id'))->get()
-            ->map(function($student) use ($analyticsFacultyIds, $selectedSubjectId, $selectedSection) {
-                $records = Record::where('student_id', $student->id)
-                    ->whereIn('user_id', $analyticsFacultyIds)
-                    ->whereNotNull('file_name')
-                    ->when($selectedSubjectId, fn ($q) => $q->where('subject_id', $selectedSubjectId))
-                    ->when(is_string($selectedSection) && $selectedSection !== '', function ($q) use ($selectedSection) {
-                        if (strcasecmp($selectedSection, 'Unassigned') === 0) {
-                            $q->where(function ($subq) {
-                                $subq->whereNull('section')->orWhere('section', '');
-                            });
-                        } else {
-                            $q->where('section', $selectedSection);
-                        }
-                    })
-                    ->get();
-                if ($records->isEmpty()) return null;
-                $totalGradePoints = 0; $countedRecords = 0;
-                foreach ($records as $record) {
-                    if (!is_null($record->grade_point) && $record->grade_point > 0) {
-                        $totalGradePoints += $record->grade_point; $countedRecords++;
-                    }
-                }
-                if ($countedRecords == 0) return null;
-                $gpa = round($totalGradePoints / $countedRecords, 2);
-                return [
-                    'name' => $student->name,
-                    'student_id' => $student->student_id,
-                    'program' => $student->program ?? 'N/A',
-                    'gpa' => $gpa,
-                    'recordCount' => $countedRecords,
-                ];
-            })
-            ->filter()
-            ->sortBy('gpa')
-            ->take(5)
-            ->values();
+        // Get top performing students using consistent logic with faculty
+        $topStudents = $this->calculateTopRankedStudents(
+            $analyticsFacultyIds->toArray(),
+            $selectedSubjectId,
+            $selectedSection,
+            null,
+            null,
+            10
+        );
         
         // Get all faculty for management tab
         $allFaculty = User::where('role', 'faculty')
@@ -242,6 +214,58 @@ class DeanController extends Controller
             'selectedSubjectId' => $selectedSubjectId,
             'selectedSection' => $selectedSection,
             'subjectSectionOptions' => $subjectSectionOptions,
+            'topRankingsRoute' => 'dean.top-rankings',
+        ]);
+    }
+
+    public function topRankings()
+    {
+        $selectedSubjectId = request()->query('subject_id');
+        $selectedSubjectId = is_numeric($selectedSubjectId) ? (int) $selectedSubjectId : null;
+
+        $selectedSection = request()->query('section');
+        $selectedSection = is_string($selectedSection) ? trim($selectedSection) : null;
+        if ($selectedSection === '') {
+            $selectedSection = null;
+        }
+
+        $selectedYearLevel = request()->query('year_level');
+        $selectedYearLevel = is_numeric($selectedYearLevel) ? (string) $selectedYearLevel : null;
+
+        $selectedSemester = request()->query('semester');
+        $selectedSemester = is_string($selectedSemester) ? trim($selectedSemester) : null;
+        if ($selectedSemester === '') {
+            $selectedSemester = null;
+        }
+
+        $facultyIds = User::where('role', 'faculty')->pluck('id');
+        $analyticsFacultyIds = Record::whereIn('user_id', $facultyIds)
+            ->whereNotNull('file_name')
+            ->distinct()
+            ->pluck('user_id');
+        if ($analyticsFacultyIds->isEmpty()) {
+            $analyticsFacultyIds = $facultyIds;
+        }
+
+        $rankedStudents = $this->calculateTopRankedStudents(
+            $analyticsFacultyIds->toArray(),
+            $selectedSubjectId,
+            $selectedSection,
+            $selectedYearLevel,
+            $selectedSemester,
+            null
+        );
+
+        return view('dashboard.top-rankings', [
+            'layout' => 'layouts.dean_new',
+            'title' => 'Top Rankings - Dean Dashboard',
+            'pageTitle' => 'Top Performing Students',
+            'backRoute' => 'dashboard',
+            'rankedStudents' => $rankedStudents,
+            'selectedYearLevel' => $selectedYearLevel,
+            'selectedSubjectId' => $selectedSubjectId,
+            'selectedSection' => $selectedSection,
+            'selectedSemester' => $selectedSemester,
         ]);
     }
 
@@ -485,5 +509,107 @@ class DeanController extends Controller
             ]);
         
         return back()->with('success', 'Class record submission rejected. Faculty has been notified.');
+    }
+
+    /**
+     * Calculate top ranked students with consistent logic across all roles
+     * Uses the same filtering as faculty for accuracy
+     * 
+     * @param array|int $facultyIds - Faculty user ID(s) to scope records
+     * @param int|null $selectedSubjectId - Optional subject filter
+     * @param string|null $selectedSection - Optional section filter
+     * @param int|null $selectedYearLevel - Optional year level filter
+     * @param string|null $selectedSemester - Optional semester filter
+     * @param int $limit - Number of top students to return (default: 10)
+     * @return \Illuminate\Support\Collection
+     */
+    private function calculateTopRankedStudents($facultyIds, $selectedSubjectId = null, $selectedSection = null, $selectedYearLevel = null, $selectedSemester = null, $limit = 10)
+    {
+        // Normalize faculty IDs to array
+        if (!is_array($facultyIds)) {
+            $facultyIds = [$facultyIds];
+        }
+
+        $subjectHasSemesterColumn = Schema::hasColumn('subjects', 'semester');
+
+        // Get all students from faculty records
+        $studentsQuery = Student::whereIn('id', Record::whereIn('user_id', $facultyIds)
+            ->whereNotNull('file_name')
+            ->distinct('student_id')
+            ->pluck('student_id'));
+
+        if ($selectedYearLevel) {
+            $studentsQuery->where('year_level', $selectedYearLevel);
+        }
+        if ($selectedSubjectId) {
+            $studentsQuery->whereHas('records', function ($q) use ($selectedSubjectId) {
+                $q->where('subject_id', $selectedSubjectId);
+            });
+        }
+        if (is_string($selectedSection) && $selectedSection !== '') {
+            $studentsQuery->whereHas('records', function ($q) use ($selectedSection) {
+                if (strcasecmp($selectedSection, 'Unassigned') === 0) {
+                    $q->where(function ($subq) {
+                        $subq->whereNull('section')->orWhere('section', '');
+                    });
+                } else {
+                    $q->where('section', $selectedSection);
+                }
+            });
+        }
+
+        $students = $studentsQuery->get();
+
+        $rankedStudents = $students
+            ->map(function ($student) use ($facultyIds, $selectedSubjectId, $selectedSection, $selectedSemester, $subjectHasSemesterColumn) {
+                $records = Record::where('student_id', $student->id)
+                    ->whereIn('user_id', $facultyIds)
+                    ->whereNotNull('file_name')
+                    ->when($selectedSubjectId, fn ($q) => $q->where('subject_id', $selectedSubjectId))
+                    ->when($selectedSemester && $subjectHasSemesterColumn, function ($q) use ($selectedSemester) {
+                        $q->whereHas('subject', fn ($sq) => $sq->where('semester', $selectedSemester));
+                    })
+                    ->when(is_string($selectedSection) && $selectedSection !== '', function ($q) use ($selectedSection) {
+                        if (strcasecmp($selectedSection, 'Unassigned') === 0) {
+                            $q->where(function ($subq) {
+                                $subq->whereNull('section')->orWhere('section', '');
+                            });
+                        } else {
+                            $q->where('section', $selectedSection);
+                        }
+                    })
+                    ->get();
+
+                $gradePoints = 0;
+                $gradeCount = 0;
+                foreach ($records as $r) {
+                    if (!is_null($r->grade_point) && $r->grade_point > 0) {
+                        $gradePoints += $r->grade_point;
+                        $gradeCount++;
+                    }
+                }
+
+                $gpa = $gradeCount > 0 ? round($gradePoints / $gradeCount, 2) : 0;
+
+                $subjects = $records->map(function ($r) {
+                    return $r->subject->name ?? $r->subject->code ?? 'Unknown';
+                })->unique()->implode(', ');
+
+                return [
+                    'id' => $student->id,
+                    'name' => $student->name,
+                    'student_id' => $student->student_id,
+                    'program' => $student->program ?? '—',
+                    'subjects' => $subjects,
+                    'gpa' => $gpa,
+                    'recordCount' => $records->count(),
+                ];
+            })
+            ->filter(fn ($s) => $s['gpa'] > 0 && $s['gpa'] <= 2.0)
+            ->sortBy('gpa')
+            ->take($limit)
+            ->values();
+
+        return $rankedStudents;
     }
 }

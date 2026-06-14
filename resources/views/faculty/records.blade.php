@@ -41,13 +41,13 @@
         </div>
 
         @php
-            $useExcel = !empty($excelByGroup) && !empty($excelPreviewData['headers']);
+            $useExcel = !empty($excelBySection) && !empty($excelPreviewData['headers']);
         @endphp
 
         @if($useExcel)
             <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(500px, 1fr)); gap: 24px;">
-                @foreach($excelByGroup as $groupName => $sectionRows)
-                    <div class="record-card" data-section="{{ $groupName }}" style="
+                @foreach($excelBySection as $section => $sectionRows)
+                    <div class="record-card" data-section="{{ $section }}" style="
                         background: white;
                         border-radius: 12px;
                         border: 1px solid #edf2f7;
@@ -64,7 +64,7 @@
                             border-radius: 12px 12px 0 0;
                             flex-shrink: 0;
                         ">
-                            <h4 style="font-size: 15px; font-weight: 700; color: #1e3c72; margin: 0;">{{ $groupName }}</h4>
+                            <h4 style="font-size: 15px; font-weight: 700; color: #1e3c72; margin: 0;">Section: {{ $section }}</h4>
                             <p style="font-size: 12px; color: #64748b; margin: 4px 0 0 0;">{{ count($sectionRows) }} records</p>
                         </div>
 
@@ -75,35 +75,98 @@
                             overflow-x: auto;
                             position: relative;
                         " class="card-scroll-container">
-                            <table class="excelRecordsTable" style="width: 100%; border-collapse: collapse; font-size: 13px;">
+                            <table class="excelRecordsTable" style="width: 100%; border-collapse: collapse; font-size: 13px; table-layout: auto;">
+                                @php
+                                    // Normalize headers and choose ordering: Student Name first, then existing headers, Remarks/Status last
+                                    $rawHeaders = $excelPreviewData['headers'] ?? [];
+                                    // find indices for name-like and remark/status-like headers
+                                    $nameIdx = null;
+                                    $remarkIdx = null;
+                                    foreach ($rawHeaders as $i => $h) {
+                                        $low = strtolower(trim((string)$h));
+                                        if ($nameIdx === null && (strpos($low, 'name') !== false || strpos($low, 'student') !== false)) {
+                                            $nameIdx = $i;
+                                        }
+                                        if ($remarkIdx === null && (strpos($low, 'remark') !== false || strpos($low, 'remarks') !== false || strpos($low, 'status') !== false || strpos($low, 'passed') !== false || strpos($low, 'failed') !== false)) {
+                                            $remarkIdx = $i;
+                                        }
+                                    }
+
+                                    $orderedHeaders = [];
+                                    if ($nameIdx !== null) {
+                                        $orderedHeaders[] = $rawHeaders[$nameIdx];
+                                    } else {
+                                        $orderedHeaders[] = 'Student Name';
+                                    }
+
+                                    // Add all headers except the chosen name/remark ones
+                                    foreach ($rawHeaders as $i => $h) {
+                                        if ($i === $nameIdx || $i === $remarkIdx) continue;
+                                        $orderedHeaders[] = $h;
+                                    }
+
+                                    if ($remarkIdx !== null) {
+                                        $orderedHeaders[] = $rawHeaders[$remarkIdx];
+                                    } else {
+                                        $orderedHeaders[] = 'Remarks';
+                                    }
+                                @endphp
+
                                 <thead style="position: sticky; top: 0; z-index: 10;">
                                     <tr style="background: #f1f5f9; border-bottom: 1px solid #edf2f7;">
-                                        <th style="padding: 12px; text-align: left; border-bottom: 2px solid #edf2f7; color: #1e3c72; font-size: 12px; font-weight: 700; min-width: 150px; position: sticky; left: 0; background: #f1f5f9; z-index: 11;">Name of Student</th>
-                                        @foreach(array_slice($excelPreviewData['headers'] ?? [], 1) as $header)
-                                            <th style="padding: 12px; text-align: left; border-bottom: 2px solid #edf2f7; color: #1e3c72; font-size: 12px; font-weight: 700;">{{ $header }}</th>
+                                        @foreach($orderedHeaders as $hIdx => $header)
+                                            @php
+                                                $label = trim((string)($header ?? '')) ?: ($hIdx === 0 ? 'Student Name' : '');
+                                                $thStyle = 'padding: 12px; font-weight: 700; color: #1e3c72; font-size: 12px;';
+                                                $thStyle .= $hIdx === 0 ? ' text-align: left;' : ' text-align: center;';
+                                            @endphp
+                                            <th style="{{ $thStyle }}">{{ $label }}</th>
                                         @endforeach
                                     </tr>
                                 </thead>
+
                                 <tbody>
                                     @foreach($sectionRows as $row)
-                                        <tr style="border-bottom: 1px solid #edf2f7;">
-                                            @if(count($row) > 0)
+                                        <tr class="record-row" style="border-bottom: 1px solid #edf2f7; transition: all 0.2s ease;" onmouseover="this.style.backgroundColor='#f8fafc'" onmouseout="this.style.backgroundColor='transparent'">
+                                            @foreach($orderedHeaders as $colIdx => $header)
                                                 @php
-                                                    $firstCell = reset($row);
-                                                    $displayFirstCell = is_scalar($firstCell) ? (string) $firstCell : json_encode($firstCell);
-                                                @endphp
-                                                <td style="padding: 10px 12px; color: #334155; min-width: 150px; position: sticky; left: 0; background: white; z-index: 9;">{{ $displayFirstCell }}</td>
-                                            @endif
-                                            @foreach(array_slice($row, 1) as $cell)
-                                                @php
-                                                    $displayCell = is_scalar($cell) ? (string) $cell : json_encode($cell);
-                                                    if (is_numeric($displayCell)) {
-                                                        if (strpos($displayCell, '.') !== false || (float)$displayCell <= 100) {
-                                                            $displayCell = number_format((float)$displayCell, 2, '.', '');
+                                                    $raw = '';
+                                                    $foundOrig = null;
+                                                    // try to find original index for this header
+                                                    foreach ($rawHeaders as $i => $h) {
+                                                        if (strtolower(trim((string)$h)) === strtolower(trim((string)$header))) { $foundOrig = $i; break; }
+                                                    }
+
+                                                    if ($foundOrig !== null) {
+                                                        $raw = $row[$foundOrig] ?? '';
+                                                    } else {
+                                                        // fallback heuristics
+                                                        if ($colIdx === 0) {
+                                                            $raw = $row[$nameIdx ?? 0] ?? $row[0] ?? '';
+                                                        } elseif ($colIdx === count($orderedHeaders) - 1) {
+                                                            $raw = $row[$remarkIdx ?? (count($row) - 1)] ?? '';
+                                                        } else {
+                                                            $raw = $row[$colIdx] ?? '';
                                                         }
                                                     }
+
+                                                    if (is_array($raw) || is_object($raw)) { $raw = json_encode($raw); }
+                                                    $raw = (string)$raw;
+                                                    $trimmed = trim($raw);
+                                                    $isNumeric = $trimmed !== '' && is_numeric($trimmed);
+                                                    if ($isNumeric) { $display = number_format((float)$trimmed, 2, '.', ''); }
+                                                    else { $display = $raw; }
+
+                                                    // styles: name column left and allow wrap; numeric center; remarks left
+                                                    if ($colIdx === 0) {
+                                                        $tdStyle = 'padding: 12px; color: #334155; text-align: left; white-space: normal;';
+                                                    } elseif ($colIdx === count($orderedHeaders) - 1) {
+                                                        $tdStyle = 'padding: 12px; color: #64748b; text-align: left; white-space: nowrap;';
+                                                    } else {
+                                                        $tdStyle = 'padding: 12px; color: #334155; ' . ($isNumeric ? 'text-align: center; font-weight:700; white-space: nowrap;' : 'text-align: left; white-space: nowrap;');
+                                                    }
                                                 @endphp
-                                                <td style="padding: 10px 12px; color: #334155;">{{ $displayCell }}</td>
+                                                <td style="{{ $tdStyle }}">{{ $display }}</td>
                                             @endforeach
                                         </tr>
                                     @endforeach
@@ -115,8 +178,8 @@
             </div>
         @elseif($records->count() > 0)
             <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(550px, 1fr)); gap: 24px;">
-                @foreach($recordsByGroup as $groupName => $sectionRecords)
-                    <div class="record-card" data-section="{{ $groupName }}" style="
+                @foreach($recordsBySection as $section => $sectionRecords)
+                    <div class="record-card" data-section="{{ $section }}" style="
                         background: white;
                         border-radius: 12px;
                         border: 1px solid #edf2f7;
@@ -133,7 +196,7 @@
                             border-radius: 12px 12px 0 0;
                             flex-shrink: 0;
                         ">
-                            <h4 style="font-size: 15px; font-weight: 700; color: #1e3c72; margin: 0;">{{ $groupName }}</h4>
+                            <h4 style="font-size: 15px; font-weight: 700; color: #1e3c72; margin: 0;">Section: {{ $section }}</h4>
                             <p style="font-size: 12px; color: #64748b; margin: 4px 0 0 0;">{{ count($sectionRecords) }} records</p>
                         </div>
 
@@ -147,7 +210,7 @@
                             <table class="recordsTable" style="width: 100%; border-collapse: collapse; font-size: 13px; table-layout: auto;">
                                 <thead style="position: sticky; top: 0; z-index: 10;">
                                     <tr style="background: #f1f5f9; border-bottom: 1px solid #edf2f7;">
-                                        <th style="padding: 12px; text-align: left; font-weight: 700; color: #1e3c72; white-space: nowrap; font-size: 12px; min-width: 150px; position: sticky; left: 0; background: #f1f5f9; z-index: 11;">Student Name</th>
+                                        <th style="padding: 12px; text-align: left; font-weight: 700; color: #1e3c72; white-space: nowrap; font-size: 12px;">Student Name</th>
                                         <th style="padding: 12px; text-align: left; font-weight: 700; color: #1e3c72; white-space: nowrap; font-size: 12px;">Subject Code</th>
                                         <th style="padding: 12px; text-align: left; font-weight: 700; color: #1e3c72; white-space: nowrap; font-size: 12px;">Subject Name</th>
                                         <th style="padding: 12px; text-align: center; font-weight: 700; color: #1e3c72; white-space: nowrap; font-size: 12px;">Grade</th>
@@ -157,13 +220,13 @@
                                 <tbody>
                                     @foreach($sectionRecords as $record)
                                     <tr class="record-row" style="border-bottom: 1px solid #edf2f7; transition: all 0.2s ease;" onmouseover="this.style.backgroundColor='#f8fafc'" onmouseout="this.style.backgroundColor='transparent'">
-                                        <td style="padding: 12px; color: #334155; font-weight: 500; min-width: 150px; position: sticky; left: 0; background: white; z-index: 9;">{{ $record->student->name ?? 'Unknown' }}</td>
+                                        <td style="padding: 12px; color: #334155; font-weight: 500;">{{ $record->student->name ?? 'Unknown' }}</td>
                                         <td style="padding: 12px; color: #64748b;">{{ $record->subject->code ?? 'N/A' }}</td>
                                         <td style="padding: 12px; color: #64748b;">{{ $record->subject->name ?? 'Unknown' }}</td>
                                         <td style="padding: 12px; text-align: center; font-weight: 700; color: #1e3c72;">
                                             @php
                                                 $grade = $record->grade ?? '-';
-                                                if (is_numeric($grade)) {
+                                                if (is_numeric($grade) && strpos((string)$grade, '.') !== false) {
                                                     $grade = number_format((float)$grade, 2, '.', '');
                                                 }
                                             @endphp

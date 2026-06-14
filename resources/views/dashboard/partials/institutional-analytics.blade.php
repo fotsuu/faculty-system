@@ -130,11 +130,14 @@
     </div>
 
     <div class="section">
-        <div class="section-header">
+        <div class="section-header" style="display:flex; justify-content:space-between; align-items:flex-end; gap:12px;">
             <div>
                 <h3 class="section-title">Institutional Top Performers</h3>
                 <div class="section-subtitle">Based on cumulative GPA across all programs</div>
             </div>
+            @if(!empty($topRankingsRoute))
+                <a href="{{ route($topRankingsRoute, request()->query()) }}" style="font-size:12px; color:#1e3c72; text-decoration:none; font-weight:700;">View All →</a>
+            @endif
         </div>
         <div style="margin-top: 10px;">
             @forelse($topStudents as $index => $performer)
