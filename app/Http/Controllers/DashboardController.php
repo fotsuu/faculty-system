@@ -1249,12 +1249,36 @@ class DashboardController extends Controller
 
         $displayTotalRecords = $excelTotalRows > 0 ? $excelTotalRows : $records->count();
 
+        // Group DB records by section for the per-section cards used in the view
+        $recordsBySection = $records->groupBy(function ($record) {
+            $section = trim((string)$record->section);
+            return $section === '' ? 'Unassigned' : $section;
+        });
+
+        // For excel preview groups (which are keyed as "Subject - Section"), normalize to section-only groups
+        $excelBySection = null;
+        if (!empty($excelByGroup)) {
+            $excelBySection = collect([]);
+            foreach ($excelByGroup as $groupKey => $rows) {
+                // section is taken as the last " - " delimited part of the group key
+                $pos = strrpos((string)$groupKey, ' - ');
+                $sectionName = $pos === false ? trim((string)$groupKey) : trim(substr((string)$groupKey, $pos + 3));
+                if ($sectionName === '') $sectionName = 'Unassigned';
+                if (!$excelBySection->has($sectionName)) {
+                    $excelBySection[$sectionName] = [];
+                }
+                $excelBySection[$sectionName] = array_merge($excelBySection[$sectionName], is_array($rows) ? $rows : $rows->toArray());
+            }
+        }
+
         return view('faculty.records', [
             'records' => $records,
             'recordsByGroup' => $recordsByGroup,
+            'recordsBySection' => $recordsBySection,
             'totalRecords' => $displayTotalRecords,
             'excelPreviewData' => $excelPreviewData,
             'excelByGroup' => $excelByGroup,
+            'excelBySection' => $excelBySection,
         ]);
     }
 
